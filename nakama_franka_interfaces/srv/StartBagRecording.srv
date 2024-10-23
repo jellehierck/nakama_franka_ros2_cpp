@@ -8,9 +8,11 @@ string bag_path "bags/"
 string bag_name "recorded_bag"
 
 # Whether the bag name is appended with a timestamp of the time it was opened.
+# The format used is an underscore followed by the ISO 8601 datetime format (without timezone specifier), e.g. 
+# "_2024-10-23T17:16:40"
 bool append_timestamp true
 
 ---
 
 # Result is whether the bag is opened or not.
-bool opened
+bool started

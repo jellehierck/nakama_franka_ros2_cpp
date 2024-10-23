@@ -17,6 +17,7 @@ find_package(rosbag2_cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(franka_msgs REQUIRED)
+find_package(nakama_franka_interfaces REQUIRED)
 
 add_executable(franka_state_bag_recorder src/franka_state_bag_recorder.cpp)
 target_include_directories(franka_state_bag_recorder PUBLIC
@@ -31,6 +32,7 @@ ament_target_dependencies(
   "std_msgs"
   "sensor_msgs"
   "franka_msgs"
+  "nakama_franka_interfaces"
 )
 
 install(TARGETS franka_state_bag_recorder
