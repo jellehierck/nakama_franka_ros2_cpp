@@ -20,9 +20,9 @@ class FrankaStateBagRecorder : public rclcpp::Node {
     // Subscriptions to topics which are recorded
     // TODO: Add more subscriptions for more franka state data? If needed.
     // TODO: Make the input subscription a parameter or use remaps
-    desired_joint_states_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-      "/franka_robot_state_broadcaster/desired_joint_states", rclcpp::SystemDefaultsQoS(),
-      std::bind(&FrankaStateBagRecorder::desired_joint_states_callback, this, std::placeholders::_1)
+    measured_joint_states_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+      "/franka_robot_state_broadcaster/measured_joint_states", rclcpp::SystemDefaultsQoS(),
+      std::bind(&FrankaStateBagRecorder::measured_joint_states_callback, this, std::placeholders::_1)
     );
 
     // Register the services
@@ -40,7 +40,7 @@ class FrankaStateBagRecorder : public rclcpp::Node {
   }
 
  private:
-  void desired_joint_states_callback(sensor_msgs::msg::JointState::ConstSharedPtr msg) const {
+  void measured_joint_states_callback(sensor_msgs::msg::JointState::ConstSharedPtr msg) const {
     // If the writer is not open yet, do nothing
     if (!recording_started_.load(std::memory_order_relaxed)) {
       return;
@@ -110,7 +110,7 @@ class FrankaStateBagRecorder : public rclcpp::Node {
     RCLCPP_INFO(this->get_logger(), "Stopped recording");
   }
 
-  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr desired_joint_states_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr measured_joint_states_sub_;
 
   rclcpp::Service<nakama_franka_interfaces::srv::StartBagRecording>::SharedPtr start_recording_srv_;
   rclcpp::Service<nakama_franka_interfaces::srv::StopBagRecording>::SharedPtr  stop_recording_srv_;
