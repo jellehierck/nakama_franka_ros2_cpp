@@ -3,7 +3,6 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
-from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -58,7 +57,7 @@ def generate_launch_description():
             # Franka bringup
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    [PathJoinSubstitution([FindPackageShare("franka_bringup"), "launch", "franka.launch.py"])]
+                    [PathJoinSubstitution([FindPackageShare("nakama_franka_bringup"), "launch", "franka.launch.py"])]
                 ),
                 launch_arguments={
                     robot_ip_parameter_name: robot_ip,
@@ -68,12 +67,6 @@ def generate_launch_description():
                     fake_sensor_commands_parameter_name: fake_sensor_commands,
                     use_rviz_parameter_name: use_rviz,
                 }.items(),
-            ),
-            # Start the bag recorder node
-            Node(
-                package="nakama_franka_bag",
-                executable="franka_state_bag_recorder",
-                name="franka_state_bag_recorder",
             ),
         ]
     )

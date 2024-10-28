@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 3.8)
-project(nakama_franka_ros2_bringup)
+project(nakama_franka_bringup)
 
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch
+  DIRECTORY 
+  launch
+  config
   DESTINATION share/${PROJECT_NAME}
 )
 
