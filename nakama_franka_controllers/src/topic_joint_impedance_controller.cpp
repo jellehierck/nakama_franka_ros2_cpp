@@ -1,6 +1,5 @@
-#include "nakama_franka_ros2_controllers/playback_joint_impedance_controller.hpp"
+#include "nakama_franka_ros2_controllers/topic_joint_impedance_controller.hpp"
 
-#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -12,13 +11,17 @@
 #include <rclcpp/duration.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/time.hpp>
+#include <rclcpp/qos.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+#include <realtime_tools/realtime_buffer.h>
 #include <controller_interface/controller_interface_base.hpp>
 
-nakama_franka_controllers::PlaybackJointImpedanceController::PlaybackJointImpedanceController() = default;
+#include <nakama_franka_interfaces/msg/franka_joint_commands.hpp>
+
+nakama_franka_controllers::TopicJointImpedanceController::TopicJointImpedanceController() = default;
 
 controller_interface::InterfaceConfiguration
-nakama_franka_controllers::PlaybackJointImpedanceController::command_interface_configuration() const {
+nakama_franka_controllers::TopicJointImpedanceController::command_interface_configuration() const {
   controller_interface::InterfaceConfiguration config;
   config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
 
@@ -29,7 +32,7 @@ nakama_franka_controllers::PlaybackJointImpedanceController::command_interface_c
 }
 
 controller_interface::InterfaceConfiguration
-nakama_franka_controllers::PlaybackJointImpedanceController::state_interface_configuration() const {
+nakama_franka_controllers::TopicJointImpedanceController::state_interface_configuration() const {
   controller_interface::InterfaceConfiguration config;
   config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
   for (size_t i = 1; i <= N_JOINTS; i++) {
@@ -39,7 +42,7 @@ nakama_franka_controllers::PlaybackJointImpedanceController::state_interface_con
   return config;
 }
 
-controller_interface::CallbackReturn nakama_franka_controllers::PlaybackJointImpedanceController::on_init() {
+controller_interface::CallbackReturn nakama_franka_controllers::TopicJointImpedanceController::on_init() {
   try {
     auto_declare<double>("motion_duration", DEFAULT_MOTION_DURATION_SEC);
     auto_declare<std::vector<double>>("k_gains", {});
@@ -51,7 +54,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::PlaybackJointImp
   return CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn nakama_franka_controllers::PlaybackJointImpedanceController::
+controller_interface::CallbackReturn nakama_franka_controllers::TopicJointImpedanceController::
   on_configure(                     // NOLINT(readability-function-cognitive-complexity)
     const rclcpp_lifecycle::State & /*previous_state*/
   ) {
@@ -102,7 +105,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::PlaybackJointImp
 }
 
 controller_interface::CallbackReturn
-nakama_franka_controllers::PlaybackJointImpedanceController::on_activate(const rclcpp_lifecycle::State
+nakama_franka_controllers::TopicJointImpedanceController::on_activate(const rclcpp_lifecycle::State
                                                                            & /*previous_state*/) {
   // reset command buffer if a command came through callback when controller was inactive
   rt_command_buffer_ =
@@ -118,7 +121,7 @@ nakama_franka_controllers::PlaybackJointImpedanceController::on_activate(const r
 }
 
 controller_interface::CallbackReturn
-nakama_franka_controllers::PlaybackJointImpedanceController::on_deactivate(const rclcpp_lifecycle::State
+nakama_franka_controllers::TopicJointImpedanceController::on_deactivate(const rclcpp_lifecycle::State
                                                                              & /*previous_state*/) {
   // reset command buffer
   rt_command_buffer_ =
@@ -126,7 +129,7 @@ nakama_franka_controllers::PlaybackJointImpedanceController::on_deactivate(const
   return CallbackReturn::SUCCESS;
 }
 
-void nakama_franka_controllers::PlaybackJointImpedanceController::update_joint_states() {
+void nakama_franka_controllers::TopicJointImpedanceController::update_joint_states() {
   for (size_t i = 0; i < N_JOINTS; i++) {
     const auto &position_interface = state_interfaces_.at(2 * i);
     const auto &velocity_interface = state_interfaces_.at(2 * i + 1);
@@ -139,7 +142,7 @@ void nakama_franka_controllers::PlaybackJointImpedanceController::update_joint_s
   }
 }
 
-controller_interface::return_type nakama_franka_controllers::PlaybackJointImpedanceController::update(
+controller_interface::return_type nakama_franka_controllers::TopicJointImpedanceController::update(
   const rclcpp::Time & /*time*/, const rclcpp::Duration &period
 ) {
   // Get the joint positions and velocities
@@ -151,11 +154,11 @@ controller_interface::return_type nakama_franka_controllers::PlaybackJointImpeda
   // Read the next comand from the real-time buffer
   // TODO: only obtain the latest command
   // TODO: check if command is stale
-  auto     joint_commands = rt_command_buffer_.readFromRT();
+  auto    *joint_commands = rt_command_buffer_.readFromRT();
   Vector7d joint_positions_desired;
 
   // Check if a new command is ready
-  if (!joint_commands || !(*joint_commands)) {
+  if ((joint_commands == nullptr) || !(*joint_commands)) {
     std::chrono::milliseconds warning_throttle_time = std::chrono::milliseconds(5000);
     RCLCPP_WARN_THROTTLE(
       get_node()->get_logger(), *(get_node()->get_clock()), warning_throttle_time.count(),
@@ -204,5 +207,5 @@ controller_interface::return_type nakama_franka_controllers::PlaybackJointImpeda
 #include <pluginlib/class_list_macros.hpp>
 
 PLUGINLIB_EXPORT_CLASS(
-  nakama_franka_controllers::PlaybackJointImpedanceController, controller_interface::ControllerInterface
+  nakama_franka_controllers::TopicJointImpedanceController, controller_interface::ControllerInterface
 )

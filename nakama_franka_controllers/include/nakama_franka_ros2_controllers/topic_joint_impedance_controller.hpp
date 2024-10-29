@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/subscription.hpp>
 #include <rclcpp/time.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 #include <controller_interface/controller_interface.hpp>
@@ -19,7 +20,7 @@
 
 namespace nakama_franka_controllers {
 
-class PlaybackJointImpedanceController : public controller_interface::ControllerInterface {
+class TopicJointImpedanceController : public controller_interface::ControllerInterface {
  public:
   static constexpr const size_t N_JOINTS = 7;
   // TODO: Make configurable
@@ -29,7 +30,7 @@ class PlaybackJointImpedanceController : public controller_interface::Controller
 
   using Vector7d = Eigen::Matrix<double, N_JOINTS, 1>;
 
-  PlaybackJointImpedanceController();
+  TopicJointImpedanceController();
 
   [[nodiscard]] controller_interface::InterfaceConfiguration command_interface_configuration() const override;
 
@@ -49,9 +50,8 @@ class PlaybackJointImpedanceController : public controller_interface::Controller
   void update_joint_states();
 
   // Tools required to subscribe to and store commands
-  rclcpp::Subscription<nakama_franka_interfaces::msg::FrankaJointCommands>::SharedPtr joint_commands_sub_;
-  realtime_tools::RealtimeBuffer<std::shared_ptr<nakama_franka_interfaces::msg::FrankaJointCommands>>
-    rt_command_buffer_;
+  rclcpp::Subscription<nakama_franka_interfaces::msg::FrankaJointCommands>::SharedPtr           joint_commands_sub_;
+  realtime_tools::RealtimeBuffer<nakama_franka_interfaces::msg::FrankaJointCommands::SharedPtr> rt_command_buffer_;
 
   // TODO: Make goal configurable
   const Vector7d joint_positions_goal_{M_PI / 4.0, M_PI / 4, 0, -3 * M_PI / 4, 0, M_PI / 2, M_PI / 4};

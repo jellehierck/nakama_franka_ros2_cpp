@@ -23,7 +23,7 @@ find_package(nakama_franka_interfaces REQUIRED)
 add_library(${PROJECT_NAME} SHARED
     src/local_joint_position_controller.cpp
     src/local_joint_impedance_controller.cpp
-    src/playback_joint_impedance_controller.cpp
+    src/topic_joint_impedance_controller.cpp
 )
 target_compile_features(${PROJECT_NAME}
     PUBLIC c_std_99 # Require C99
@@ -77,7 +77,7 @@ if(BUILD_TESTING)
     ament_add_gmock(${PROJECT_NAME}_test_load
         test/test_load_local_joint_position_controller.cpp
         test/test_load_local_joint_impedance_controller.cpp
-        test/test_load_playback_joint_impedance_controller.cpp
+        test/test_load_topic_joint_impedance_controller.cpp
 
         # Add more controller load tests here
     )

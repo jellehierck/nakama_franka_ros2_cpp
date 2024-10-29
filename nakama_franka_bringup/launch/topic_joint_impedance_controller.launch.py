@@ -74,13 +74,13 @@ def generate_launch_description():
                 package="controller_manager",
                 executable="spawner",
                 arguments=[
-                    "nakama_playback_joint_impedance_controller",
+                    "nakama_topic_joint_impedance_controller",
                     "--param-file",
                     PathJoinSubstitution(
                         [
                             FindPackageShare("nakama_franka_controllers"),
                             "config",
-                            "nakama_playback_joint_impedance_controller.yaml",
+                            "nakama_topic_joint_impedance_controller.yaml",
                         ]
                     ),
                 ],
