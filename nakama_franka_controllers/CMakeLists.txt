@@ -18,12 +18,16 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(realtime_tools REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_transport REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(nakama_franka_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
     src/local_joint_position_controller.cpp
     src/local_joint_impedance_controller.cpp
     src/topic_joint_impedance_controller.cpp
+    src/bag_playback_joint_impedance_controller.cpp
 )
 target_compile_features(${PROJECT_NAME}
     PUBLIC c_std_99 # Require C99
@@ -42,6 +46,9 @@ ament_target_dependencies(${PROJECT_NAME}
     pluginlib
     realtime_tools
     nakama_franka_interfaces
+    rosbag2_cpp
+    rosbag2_transport
+    sensor_msgs
 )
 
 pluginlib_export_plugin_description_file(
@@ -78,6 +85,7 @@ if(BUILD_TESTING)
         test/test_load_local_joint_position_controller.cpp
         test/test_load_local_joint_impedance_controller.cpp
         test/test_load_topic_joint_impedance_controller.cpp
+        test/test_load_bag_playback_joint_impedance_controller.cpp
 
         # Add more controller load tests here
     )
