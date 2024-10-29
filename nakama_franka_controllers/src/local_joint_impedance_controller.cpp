@@ -130,7 +130,7 @@ controller_interface::return_type nakama_franka_controllers::LocalJointImpedance
   double   motion_duration_fraction = std::min(elapsed_sec_ / motion_duration_sec_, 1.0);
   double   motion_fraction = 0.5 * (1 + std::cos(M_PI * (1 + motion_duration_fraction)));
   Vector7d joint_positions_desired =
-    joint_positions_init_ * (1 - motion_fraction) - -joint_positions_goal_ * motion_fraction;
+    joint_positions_init_ * (1 - motion_fraction) - joint_positions_goal_ * motion_fraction;
 
   // Only command the first joint to move
   for (size_t i = 0; i < N_JOINTS; i++) {
