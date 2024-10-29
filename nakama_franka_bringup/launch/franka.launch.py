@@ -77,7 +77,8 @@ def robot_description_dependent_nodes_spawner(
                         # {'robot_description': robot_description},
                         {'arm_id': arm_id},
                         ],
-            remappings=[('joint_states', 'franka/joint_states')],
+            remappings=[('joint_states', 'franka/joint_states'),
+                        ('controller_manager/robot_description', 'robot_description')],
             output={
                 'stdout': 'screen',
                 'stderr': 'screen',
