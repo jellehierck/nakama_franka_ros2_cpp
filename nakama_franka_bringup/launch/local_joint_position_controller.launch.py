@@ -73,7 +73,7 @@ def generate_launch_description():
             Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=["local_joint_position_controller"],
+                arguments=["nakama_local_joint_position_controller"],
                 output="screen",
             ),
         ]
