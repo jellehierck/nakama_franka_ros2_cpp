@@ -73,7 +73,17 @@ def generate_launch_description():
             Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=["nakama_local_joint_impedance_controller"],
+                arguments=[
+                    "nakama_local_joint_impedance_controller",
+                    "--param-file",
+                    PathJoinSubstitution(
+                        [
+                            FindPackageShare("nakama_franka_controllers"),
+                            "config",
+                            "nakama_local_joint_impedance_controller.yaml",
+                        ]
+                    ),
+                ],
                 output="screen",
             ),
         ]

@@ -17,10 +17,13 @@ find_package(pluginlib REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(nakama_franka_interfaces REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
     src/local_joint_position_controller.cpp
     src/local_joint_impedance_controller.cpp
+    src/playback_joint_impedance_controller.cpp
 )
 target_compile_features(${PROJECT_NAME}
     PUBLIC c_std_99 # Require C99
@@ -37,6 +40,8 @@ ament_target_dependencies(${PROJECT_NAME}
     controller_interface
     hardware_interface
     pluginlib
+    realtime_tools
+    nakama_franka_interfaces
 )
 
 pluginlib_export_plugin_description_file(
@@ -56,6 +61,11 @@ install(
     DESTINATION include
 )
 
+install(
+    DIRECTORY config
+    DESTINATION share/${PROJECT_NAME}
+)
+
 if(BUILD_TESTING)
     find_package(ament_lint_auto REQUIRED)
     find_package(ament_cmake_gmock REQUIRED)
@@ -67,6 +77,7 @@ if(BUILD_TESTING)
     ament_add_gmock(${PROJECT_NAME}_test_load
         test/test_load_local_joint_position_controller.cpp
         test/test_load_local_joint_impedance_controller.cpp
+        test/test_load_playback_joint_impedance_controller.cpp
 
         # Add more controller load tests here
     )
