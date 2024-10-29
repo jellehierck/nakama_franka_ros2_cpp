@@ -9,7 +9,7 @@
 #include <hardware_interface/resource_manager.hpp>
 #include <ros2_control_test_assets/descriptions.hpp>
 
-TEST(TestLoadControllers, test_load_playback_joint_impedance_controller) {
+TEST(TestLoadControllers, test_load_topic_joint_impedance_controller) {
   rclcpp::init(0, nullptr);
 
   std::shared_ptr<rclcpp::Executor> executor = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -20,7 +20,7 @@ TEST(TestLoadControllers, test_load_playback_joint_impedance_controller) {
   );
 
   auto response = controller_manager.load_controller(
-    "test_local_joint_impedance_controller", "nakama_franka_controllers/PlaybackJointImpedanceController"
+    "test_topic_joint_impedance_controller", "nakama_franka_controllers/TopicJointImpedanceController"
   );
 
   ASSERT_NE(response, nullptr);
