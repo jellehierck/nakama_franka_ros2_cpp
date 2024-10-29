@@ -1,7 +1,12 @@
 <library path="nakama_franka_controllers">
     <class name="nakama_franka_controllers/LocalJointPositionController" type="nakama_franka_controllers::LocalJointPositionController" base_class_type="controller_interface::ControllerInterface">
         <description>
-            Performs a predefind motion path for the first joint using only local control.
+            Performs a predefind motion path for the first joint using only local position control.
+        </description>
+    </class>
+    <class name="nakama_franka_controllers/LocalJointImpedanceController" type="nakama_franka_controllers::LocalJointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Performs a predefind motion path for the first joint using only local joint impedance control.
         </description>
     </class>
 </library>

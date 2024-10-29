@@ -16,9 +16,11 @@ find_package(controller_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(hardware_interface REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 add_library(${PROJECT_NAME} SHARED
     src/local_joint_position_controller.cpp
+    src/local_joint_impedance_controller.cpp
 )
 target_compile_features(${PROJECT_NAME}
     PUBLIC c_std_99 # Require C99
@@ -27,6 +29,7 @@ target_compile_features(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME}
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PUBLIC $<INSTALL_INTERFACE:include>
+    PUBLIC ${EIGEN3_INCLUDE_DIRS}
 )
 ament_target_dependencies(${PROJECT_NAME}
     rclcpp
@@ -37,7 +40,8 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 
 pluginlib_export_plugin_description_file(
-    controller_interface nakama_franka_controllers.xml)
+    controller_interface nakama_franka_controllers.xml
+)
 
 install(
     TARGETS
@@ -62,6 +66,7 @@ if(BUILD_TESTING)
     # Test to see if controllers can be loaded
     ament_add_gmock(${PROJECT_NAME}_test_load
         test/test_load_local_joint_position_controller.cpp
+        test/test_load_local_joint_impedance_controller.cpp
 
         # Add more controller load tests here
     )
@@ -86,10 +91,10 @@ if(BUILD_TESTING)
 endif()
 
 ament_export_include_directories(
-        include
+    include
 )
 ament_export_libraries(
-        ${PROJECT_NAME}
+    ${PROJECT_NAME}
 )
 
 ament_package()
