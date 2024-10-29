@@ -13,7 +13,10 @@
   <depend>rclcpp_lifecycle</depend>
   <depend>controller_interface</depend>
   <depend>hardware_interface</depend>
+  <depend>realtime_tools</depend>
   <depend>pluginlib</depend>
+
+  <depend>nakama_franka_interfaces</depend>
 
   <test_depend>ament_cmake_gmock</test_depend>
   <test_depend>controller_manager</test_depend>
