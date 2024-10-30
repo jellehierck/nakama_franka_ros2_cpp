@@ -214,6 +214,7 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
       try {
         joint_state_serialization_.deserialize_message(&serialized_msg, joint_state_msg.get());
       } catch (const std::exception &error) {
+        // TODO: Stop the controller gracefully if the last message in the bag is met, instead of spamming errors
         RCLCPP_ERROR(get_node()->get_logger(), "Error while deserializing bag message, error: %s", error.what());
         return controller_interface::return_type::ERROR;
       }
@@ -236,11 +237,11 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
   }
 
   // Only command the first joint to move
-  for (size_t i = 0; i < N_JOINTS; i++) {
-    if (i != 0) {
-      joint_positions_desired(static_cast<int>(i)) = joint_positions_init_(static_cast<int>(i));
-    }
-  }
+  // for (size_t i = 0; i < N_JOINTS; i++) {
+  //   if (i != 0) {
+  //     joint_positions_desired(static_cast<int>(i)) = joint_positions_init_(static_cast<int>(i));
+  //   }
+  // }
 
   // Filter the joint velocities
   joint_velocities_curr_filtered_ = (1 - VELOCITY_FILTER_ALPHA_GAIN) * joint_velocities_curr_filtered_ +

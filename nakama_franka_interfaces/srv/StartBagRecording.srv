@@ -2,6 +2,7 @@
 # The bag_name and bag_path are concatenated directly (`path = bag_path + bag_name`), so make sure that `bag_path` ends 
 # with a path separator (`"/"` for Linux).
 # A full path is recommended, but a relative path is stored relative to the directory where this node was started.
+# Note that the tilde `~/` is not supported, use `/home/<username>/` instead.
 string bag_path "bags/"
 
 # This name should be a valid name for a bag folder, i.e. not end in a path separator (`"/"` for Linux)

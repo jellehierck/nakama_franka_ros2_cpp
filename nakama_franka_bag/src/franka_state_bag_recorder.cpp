@@ -1,15 +1,31 @@
 #include <atomic>
+#include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <functional>
+#include <iomanip>
 #include <memory>
-#include <nakama_franka_interfaces/srv/detail/stop_bag_recording__struct.hpp>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
+#include <rclcpp/executors.hpp>
+#include <rclcpp/logging.hpp>
+#include <rclcpp/node.hpp>
+#include <rclcpp/qos.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/service.hpp>
+#include <rclcpp/subscription.hpp>
+#include <rclcpp/time.hpp>
+#include <rclcpp/utilities.hpp>
+
+#include <rosbag2_cpp/writer.hpp>
+
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/string.hpp>
+
 #include <nakama_franka_interfaces/srv/start_bag_recording.hpp>
 #include <nakama_franka_interfaces/srv/stop_bag_recording.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <rosbag2_cpp/writer.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <sstream>
-#include <std_msgs/msg/string.hpp>
 
 class FrankaStateBagRecorder : public rclcpp::Node {
  public:
@@ -26,6 +42,7 @@ class FrankaStateBagRecorder : public rclcpp::Node {
     );
 
     // Register the services
+    // TODO: Namespace the services (or maybe in launch file?)
     start_recording_srv_ = create_service<nakama_franka_interfaces::srv::StartBagRecording>(
       "start_bag_recording",
       std::bind(&FrankaStateBagRecorder::start_recording, this, std::placeholders::_1, std::placeholders::_2)
