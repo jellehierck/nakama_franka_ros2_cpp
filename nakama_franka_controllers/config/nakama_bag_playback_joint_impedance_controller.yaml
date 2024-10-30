@@ -1,0 +1,42 @@
+nakama_bag_playback_joint_impedance_controller:
+  ros__parameters:
+    # Controller type
+    type: nakama_franka_controllers/BagPlaybackJointImpedanceController
+
+    # Controller-specific parameters
+    k_gains:
+      - 24.0
+      - 24.0
+      - 24.0
+      - 24.0
+      - 10.0
+      - 6.0
+      - 2.0
+    d_gains:
+      - 2.0
+      - 2.0
+      - 2.0
+      - 1.0
+      - 1.0
+      - 1.0
+      - 0.5
+
+    # k_gains:
+    #   - 100.0
+    #   - 100.0
+    #   - 100.0
+    #   - 100.0
+    #   - 40.0
+    #   - 25.0
+    #   - 8.0
+    # d_gains:
+    #   - 5.0
+    #   - 5.0
+    #   - 5.0
+    #   - 3.0
+    #   - 3.0
+    #   - 3.0
+    #   - 1.5
+
+    bag_uri: "/home/fr3/nakama_ws/bags/recorded_bag_eight_motion"
+    bag_topic: /joint_state_commands

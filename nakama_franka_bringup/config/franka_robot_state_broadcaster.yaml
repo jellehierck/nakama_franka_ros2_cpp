@@ -1,0 +1,4 @@
+franka_robot_state_broadcaster:
+  ros__parameters:
+    # Controller type
+    type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster

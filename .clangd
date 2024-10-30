@@ -1,0 +1,11 @@
+Diagnostics:
+  ClangTidy:
+    FastCheckFilter: None
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+  Includes:
+    IgnoreHeader:
+      - .*__struct\.hpp  # Ignore IWYU warnings for generated headers for ROS msg types
+      - .*__builder\.hpp  # Ignore IWYU warnings for generated headers for ROS msg types
+      - .*__traits\.hpp  # Ignore IWYU warnings for generated headers for ROS msg types
+      - math.h  # Ignore warnings for this C-header which is needed for e.g. M_PI
