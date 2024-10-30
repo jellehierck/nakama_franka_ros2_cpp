@@ -19,3 +19,5 @@
 # Opinionated formatting or linting tools
 ruff.toml
 .clang-format
+.clang-tidy
+.clangd
