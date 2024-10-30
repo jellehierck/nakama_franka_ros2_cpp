@@ -1,11 +1,13 @@
 #include "nakama_franka_ros2_controllers/bag_playback_joint_impedance_controller.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -15,13 +17,16 @@
 #include <rclcpp/qos.hpp>
 #include <rclcpp/serialized_message.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+
 #include <realtime_tools/realtime_buffer.h>
 #include <controller_interface/controller_interface_base.hpp>
+
 #include <rosbag2_storage/storage_options.hpp>
 #include <rosbag2_storage/serialized_bag_message.hpp>
 #include <rosbag2_transport/reader_writer_factory.hpp>
+#include <rosbag2_storage/topic_metadata.hpp>
 
-#include <nakama_franka_interfaces/msg/franka_joint_commands.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 
 nakama_franka_controllers::BagPlaybackJointImpedanceController::BagPlaybackJointImpedanceController() = default;
 
@@ -52,6 +57,8 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
     auto_declare<double>("motion_duration", DEFAULT_MOTION_DURATION_SEC);
     auto_declare<std::vector<double>>("k_gains", {});
     auto_declare<std::vector<double>>("d_gains", {});
+    auto_declare<std::string>("bag_uri", "");
+    auto_declare<std::string>("bag_topic", "");
   } catch (const std::exception &e) {
     (void)fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -98,10 +105,12 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
     k_gains_(static_cast<int>(i)) = k_gains_param.at(i);
   }
 
-  // Prepare bag reader
-  // TODO: Make bag URI a parameter
-  bag_storage_options_.uri = "/home/jelle/thesis/nakama_ws/bags/recording";
+  // Get the bag uri parameter and create bag reader object
+  bag_storage_options_.uri = get_node()->get_parameter("bag_uri").as_string();
   bag_reader_ = rosbag2_transport::ReaderWriterFactory::make_reader(bag_storage_options_);
+
+  // Get the topic name which should be read from the bag
+  bag_joint_state_topic_ = get_node()->get_parameter("bag_topic").as_string();
 
   return CallbackReturn::SUCCESS;
 }
@@ -109,8 +118,34 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
 controller_interface::CallbackReturn
 nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(const rclcpp_lifecycle::State
                                                                               & /*previous_state*/) {
-  bag_reader_->open(bag_storage_options_);
+  // Open the bag
+  try {
+    bag_reader_->open(bag_storage_options_);
+  } catch (const std::runtime_error &error) {
+    RCLCPP_ERROR(
+      get_node()->get_logger(), "Could not open bag %s, error: %s", bag_storage_options_.uri.c_str(), error.what()
+    );
+    return CallbackReturn::ERROR;
+  }
 
+  // Check that the bag topic set as parameter is present in the bag
+  // TODO: Maybe make topic type configurable? Or create a templated class which can be templated to deserialize msgs
+  auto bag_topics_metadata = bag_reader_->get_all_topics_and_types();
+  auto is_bag_topic = [this](rosbag2_storage::TopicMetadata metadata) {
+    return metadata.name == this->bag_joint_state_topic_ &&
+           metadata.type == rosidl_generator_traits::name<sensor_msgs::msg::JointState>();
+  };
+
+  if (auto find_it = std::find_if(begin(bag_topics_metadata), end(bag_topics_metadata), is_bag_topic);
+      find_it == std::end(bag_topics_metadata)) {
+    RCLCPP_ERROR(
+      get_node()->get_logger(), "Could not find topic %s with type %s in bag %s", this->bag_joint_state_topic_.c_str(),
+      rosidl_generator_traits::name<sensor_msgs::msg::JointState>(), bag_storage_options_.uri.c_str()
+    );
+    return CallbackReturn::ERROR;
+  }
+
+  //
   update_joint_states();
   joint_velocities_curr_filtered_.setZero();
   joint_positions_init_ = joint_positions_curr_;
@@ -171,11 +206,17 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
 
     // If the message is not from the topic we want to publish, shortcut the loop and try the next message
     // TODO: Make topic name configurable
-    if (bag_msg_serialized->topic_name == "/turtle1/pose") {
-      // TODO: Verify that message on this topic is of the correct type (sensor_msgs::msg::JointState)
+    if (bag_msg_serialized->topic_name == bag_joint_state_topic_) {
       rclcpp::SerializedMessage serialized_msg(*bag_msg_serialized->serialized_data);
       auto                      joint_state_msg = std::make_shared<sensor_msgs::msg::JointState>();
-      joint_state_serialization_.deserialize_message(&serialized_msg, joint_state_msg.get());
+
+      // Deserialize the message and check that deserialization is successful
+      try {
+        joint_state_serialization_.deserialize_message(&serialized_msg, joint_state_msg.get());
+      } catch (const std::exception &error) {
+        RCLCPP_ERROR(get_node()->get_logger(), "Error while deserializing bag message, error: %s", error.what());
+        return controller_interface::return_type::ERROR;
+      }
 
       // TODO: check if command is stale
 

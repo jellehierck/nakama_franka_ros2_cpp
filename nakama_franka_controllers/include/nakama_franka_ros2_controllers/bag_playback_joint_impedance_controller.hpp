@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <string>
 
 #include <Eigen/Eigen>
 #include <Eigen/src/Core/Matrix.h>
@@ -14,14 +15,15 @@
 #include <rclcpp/subscription.hpp>
 #include <rclcpp/time.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+
 #include <controller_interface/controller_interface.hpp>
 #include <controller_interface/controller_interface_base.hpp>
-#include <rosbag2_cpp/reader.hpp>
-#include <rosbag2_storage/storage_options.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <realtime_tools/realtime_tools/realtime_buffer.h>
 
-#include "nakama_franka_interfaces/msg/franka_joint_commands.hpp"  // IWYU pragma: keep
+#include <rosbag2_cpp/reader.hpp>
+#include <rosbag2_storage/storage_options.hpp>
+
+#include <sensor_msgs/msg/joint_state.hpp>
 
 namespace nakama_franka_controllers {
 
@@ -57,6 +59,7 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
   void update_joint_states();
 
   // Tools required to read and (de)serialize messages from a bag
+  std::string                                         bag_joint_state_topic_;
   rosbag2_storage::StorageOptions                     bag_storage_options_;
   std::unique_ptr<rosbag2_cpp::Reader>                bag_reader_;
   rclcpp::Serialization<sensor_msgs::msg::JointState> joint_state_serialization_;
