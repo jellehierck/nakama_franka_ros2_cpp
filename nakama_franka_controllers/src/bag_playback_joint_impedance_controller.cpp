@@ -8,6 +8,7 @@
 #include <exception>
 #include <limits>
 #include <memory>
+#include <nakama_franka_interfaces/msg/detail/joint_impedance_command_info__struct.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -111,6 +112,16 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
   // Get the topic name which should be read from the bag
   bag_joint_state_topic_ = get_node()->get_parameter("bag_topic").as_string();
 
+  // Set up the real-time command info publisher
+  command_info_publisher_ = get_node()->create_publisher<nakama_franka_interfaces::msg::JointImpedanceCommandInfo>(
+    "~/command_info",  // Use ~ to prefix with the node name
+    rclcpp::SystemDefaultsQoS()
+  );
+  rt_command_info_publisher_ =
+    std::make_unique<realtime_tools::RealtimePublisher<nakama_franka_interfaces::msg::JointImpedanceCommandInfo>>(
+      command_info_publisher_
+    );
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -119,6 +130,8 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_cleanup(const
                                                                              & /*previous_state*/) {
   // Destroy all managed objects which were initialized in the configure stage
   bag_reader_ = nullptr;
+  rt_command_info_publisher_ = nullptr;
+  command_info_publisher_ = nullptr;
 
   return CallbackReturn::SUCCESS;
 }
@@ -217,7 +230,6 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
       return joint_positions_desired;
     }
   }
-
   // If we reached the end of the bag without finding a message, return an empty object to indicate failure
   // TODO: This will probably happen when all messages are read, need to handle that case
   RCLCPP_ERROR(
@@ -228,7 +240,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
 }
 
 controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImpedanceController::update(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/
+  const rclcpp::Time &time, const rclcpp::Duration & /*period*/
 ) {
   // Get the joint positions and velocities
   update_joint_states();
@@ -254,6 +266,30 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
                                    d_gains_.cwiseProduct(-joint_velocities_curr_filtered_);
   for (size_t i = 0; i < N_JOINTS; i++) {
     command_interfaces_[i].set_value(joint_torques_command(static_cast<int>(i)));
+  }
+
+  // Populate the command information message
+  auto command_info_msg = nakama_franka_interfaces::msg::JointImpedanceCommandInfo();
+  command_info_msg.header.stamp = time;
+  for (size_t i = 0; i < N_JOINTS; i++) {
+    command_info_msg.joint_positions_desired[i] = joint_positions_desired(static_cast<int>(i));
+    command_info_msg.joint_positions_curr[i] = joint_positions_curr_(static_cast<int>(i));
+    command_info_msg.joint_velocities_curr[i] = joint_velocities_curr_(static_cast<int>(i));
+    command_info_msg.joint_velocities_curr_filtered[i] = joint_velocities_curr_filtered_(static_cast<int>(i));
+    command_info_msg.joint_torques_command[i] = joint_torques_command(static_cast<int>(i));
+  }
+
+  // Get the real-time publisher lock
+  if (rt_command_info_publisher_ && rt_command_info_publisher_->trylock()) {
+    rt_command_info_publisher_->msg_ = command_info_msg;
+    rt_command_info_publisher_->unlockAndPublish();
+  } else {
+    // Could not get the lock and publish the message
+    std::chrono::milliseconds warning_throttle_time = std::chrono::milliseconds(5000);
+    RCLCPP_WARN_THROTTLE(
+      get_node()->get_logger(), *(get_node()->get_clock()), warning_throttle_time.count(),
+      "Could not publish at least one command info message in the last %ld ms", warning_throttle_time.count()
+    );
   }
 
   return controller_interface::return_type::OK;

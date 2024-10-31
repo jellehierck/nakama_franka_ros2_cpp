@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <nakama_franka_interfaces/msg/detail/joint_impedance_command_info__struct.hpp>
 #include <string>
 
 #include <Eigen/Eigen>
@@ -19,11 +20,14 @@
 #include <controller_interface/controller_interface.hpp>
 #include <controller_interface/controller_interface_base.hpp>
 #include <realtime_tools/realtime_tools/realtime_buffer.h>
+#include <realtime_tools/realtime_tools/realtime_publisher.h>
 
 #include <rosbag2_cpp/reader.hpp>
 #include <rosbag2_storage/storage_options.hpp>
 
 #include <franka_msgs/msg/franka_robot_state.hpp>
+
+#include <nakama_franka_interfaces/msg/joint_impedance_command_info.hpp>
 
 namespace nakama_franka_controllers {
 
@@ -104,6 +108,11 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
   rosbag2_storage::StorageOptions         bag_storage_options_;
   std::unique_ptr<rosbag2_cpp::Reader>    bag_reader_;
   rclcpp::Serialization<RecordedTopicMsg> recorded_topic_msg_serialization_;
+
+  // Tools for publishing command information to a topic
+  std::shared_ptr<realtime_tools::RealtimePublisher<nakama_franka_interfaces::msg::JointImpedanceCommandInfo>>
+    rt_command_info_publisher_;
+  std::shared_ptr<rclcpp::Publisher<nakama_franka_interfaces::msg::JointImpedanceCommandInfo>> command_info_publisher_;
 
   // TODO: Make goal configurable
   const Vector7d joint_positions_goal_{M_PI / 4.0, M_PI / 4, 0, -3 * M_PI / 4, 0, M_PI / 2, M_PI / 4};
