@@ -93,6 +93,12 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
    */
   void update_joint_states();
 
+  /**
+   * Read the next desired joint position from the bag.
+   * @return `std::optional<Vector7d>` Contains the joint positions if they could be read.
+   */
+  std::optional<Vector7d> read_next_desired_joint_positions_from_bag();
+
   // Tools required to read and (de)serialize messages from a bag
   std::string                             bag_joint_state_topic_;
   rosbag2_storage::StorageOptions         bag_storage_options_;

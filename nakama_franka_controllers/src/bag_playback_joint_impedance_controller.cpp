@@ -6,7 +6,9 @@
 #include <cstddef>
 #include <cstdio>
 #include <exception>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -181,21 +183,12 @@ void nakama_franka_controllers::BagPlaybackJointImpedanceController::update_join
   }
 }
 
-controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImpedanceController::update(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration &period
-) {
-  // Get the joint positions and velocities
-  update_joint_states();
-
-  // Update the time
-  elapsed_sec_ += period.seconds();
-
-  // Create vector for desired joint positions which will be read from the bag, and initialize to zeros
+std::optional<nakama_franka_controllers::BagPlaybackJointImpedanceController::Vector7d>
+nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desired_joint_positions_from_bag() {
   Vector7d joint_positions_desired;
-  joint_positions_desired.setZero();
 
-  // Read the next comand from the bag
-  // TODO: Check if this is possible inside the real-time loop, or if we should use some real-time friendly buffer
+  // Loop through the next bag messages until a message on the desired topic is found
+  // TODO: Check if this is okay inside the real-time loop, or if we should use some real-time friendly buffer
   while (bag_reader_->has_next()) {
     rosbag2_storage::SerializedBagMessageSharedPtr bag_msg_serialized = bag_reader_->read_next();
 
@@ -208,9 +201,9 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
       try {
         recorded_topic_msg_serialization_.deserialize_message(&serialized_msg, deserialized_msg.get());
       } catch (const std::exception &error) {
-        // TODO: Stop the controller gracefully if the last message in the bag is met, instead of spamming errors
+        // An error occurred, return an empty object to indicate failure
         RCLCPP_ERROR(get_node()->get_logger(), "Error while deserializing bag message, error: %s", error.what());
-        return controller_interface::return_type::ERROR;
+        return std::nullopt;
       }
 
       // TODO: check if command is stale
@@ -220,15 +213,39 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
         joint_positions_desired(static_cast<int>(i)) = deserialized_msg->measured_joint_state.position.at(i);
       }
 
-      break;  // We have found the next desired joint position, stop the loop
+      // We have found the next desired joint position, stop the loop
+      return joint_positions_desired;
     }
   }
 
-  // Check that a new command was set after reading the bag
-  if (joint_positions_desired.isZero()) {
+  // If we reached the end of the bag without finding a message, return an empty object to indicate failure
+  // TODO: This will probably happen when all messages are read, need to handle that case
+  RCLCPP_ERROR(
+    get_node()->get_logger(), "Could not find any more messages with topic %s inside the bag ",
+    bag_joint_state_topic_.c_str()
+  );
+  return std::nullopt;
+}
+
+controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImpedanceController::update(
+  const rclcpp::Time & /*time*/, const rclcpp::Duration &period
+) {
+  // Get the joint positions and velocities
+  update_joint_states();
+
+  // Update the time
+  elapsed_sec_ += period.seconds();
+
+  // Read the next comand from the bag
+  auto joint_positions_desired_optional = read_next_desired_joint_positions_from_bag();
+
+  // Check if a command was obtained from the bag
+  if (!joint_positions_desired_optional.has_value()) {
+    // TODO: Stop the controller gracefully if the last message in the bag is read, instead of spamming errors
     RCLCPP_ERROR(get_node()->get_logger(), "Could not read next command from the bag");
     return controller_interface::return_type::ERROR;
   }
+  auto joint_positions_desired = joint_positions_desired_optional.value();
 
   // Filter the joint velocities
   joint_velocities_curr_filtered_ = (1 - VELOCITY_FILTER_ALPHA_GAIN) * joint_velocities_curr_filtered_ +
