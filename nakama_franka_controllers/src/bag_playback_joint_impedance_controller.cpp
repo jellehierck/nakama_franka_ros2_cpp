@@ -228,19 +228,17 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
 }
 
 controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImpedanceController::update(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration &period
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/
 ) {
   // Get the joint positions and velocities
   update_joint_states();
-
-  // Update the time
-  elapsed_sec_ += period.seconds();
 
   // Read the next comand from the bag
   auto joint_positions_desired_optional = read_next_desired_joint_positions_from_bag();
 
   // Check if a command was obtained from the bag
   if (!joint_positions_desired_optional.has_value()) {
+    // No command was obtained, stop the controller
     // TODO: Stop the controller gracefully if the last message in the bag is read, instead of spamming errors
     RCLCPP_ERROR(get_node()->get_logger(), "Could not read next command from the bag");
     return controller_interface::return_type::ERROR;
