@@ -88,8 +88,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderContr
 controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderController::on_cleanup(
   const rclcpp_lifecycle::State & /*previous_state*/
 ) {
-  // Destroy all objects which were initialized in the configure stage
-  bag_record_topic_name_.clear();
+  // Destroy all managed objects which were initialized in the configure stage
   bag_writer_ = nullptr;
   start_recording_srv_ = nullptr;
   stop_recording_srv_ = nullptr;

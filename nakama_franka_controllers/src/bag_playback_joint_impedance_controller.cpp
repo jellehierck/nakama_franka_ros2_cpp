@@ -26,10 +26,6 @@
 #include <rosbag2_transport/reader_writer_factory.hpp>
 #include <rosbag2_storage/topic_metadata.hpp>
 
-#include <sensor_msgs/msg/joint_state.hpp>
-
-nakama_franka_controllers::BagPlaybackJointImpedanceController::BagPlaybackJointImpedanceController() = default;
-
 controller_interface::InterfaceConfiguration
 nakama_franka_controllers::BagPlaybackJointImpedanceController::command_interface_configuration() const {
   controller_interface::InterfaceConfiguration config;
@@ -106,11 +102,21 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
   }
 
   // Get the bag uri parameter and create bag reader object
+  bag_storage_options_ = rosbag2_storage::StorageOptions();
   bag_storage_options_.uri = get_node()->get_parameter("bag_uri").as_string();
   bag_reader_ = rosbag2_transport::ReaderWriterFactory::make_reader(bag_storage_options_);
 
   // Get the topic name which should be read from the bag
   bag_joint_state_topic_ = get_node()->get_parameter("bag_topic").as_string();
+
+  return CallbackReturn::SUCCESS;
+}
+
+controller_interface::CallbackReturn
+nakama_franka_controllers::BagPlaybackJointImpedanceController::on_cleanup(const rclcpp_lifecycle::State
+                                                                             & /*previous_state*/) {
+  // Destroy all managed objects which were initialized in the configure stage
+  bag_reader_ = nullptr;
 
   return CallbackReturn::SUCCESS;
 }
@@ -133,23 +139,21 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(cons
   auto bag_topics_metadata = bag_reader_->get_all_topics_and_types();
   auto is_bag_topic = [this](rosbag2_storage::TopicMetadata metadata) {
     return metadata.name == this->bag_joint_state_topic_ &&
-           metadata.type == rosidl_generator_traits::name<sensor_msgs::msg::JointState>();
+           metadata.type == rosidl_generator_traits::name<RecordedTopicMsg>();
   };
-
   if (auto find_it = std::find_if(begin(bag_topics_metadata), end(bag_topics_metadata), is_bag_topic);
       find_it == std::end(bag_topics_metadata)) {
     RCLCPP_ERROR(
       get_node()->get_logger(), "Could not find topic %s with type %s in bag %s", this->bag_joint_state_topic_.c_str(),
-      rosidl_generator_traits::name<sensor_msgs::msg::JointState>(), bag_storage_options_.uri.c_str()
+      rosidl_generator_traits::name<RecordedTopicMsg>(), bag_storage_options_.uri.c_str()
     );
     return CallbackReturn::ERROR;
   }
 
-  //
+  // Initialize controller variables
   update_joint_states();
   joint_velocities_curr_filtered_.setZero();
   joint_positions_init_ = joint_positions_curr_;
-
   elapsed_sec_ = 0.0;
 
   return CallbackReturn::SUCCESS;
@@ -160,15 +164,6 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_deactivate(co
                                                                                 & /*previous_state*/) {
   // Close the bag reader
   bag_reader_->close();
-
-  return CallbackReturn::SUCCESS;
-}
-
-controller_interface::CallbackReturn
-nakama_franka_controllers::BagPlaybackJointImpedanceController::on_cleanup(const rclcpp_lifecycle::State
-                                                                             & /*previous_state*/) {
-  // Destroy the bag reader
-  bag_reader_ = nullptr;
 
   return CallbackReturn::SUCCESS;
 }
@@ -205,14 +200,13 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
     rosbag2_storage::SerializedBagMessageSharedPtr bag_msg_serialized = bag_reader_->read_next();
 
     // If the message is not from the topic we want to publish, shortcut the loop and try the next message
-    // TODO: Make topic name configurable
     if (bag_msg_serialized->topic_name == bag_joint_state_topic_) {
       rclcpp::SerializedMessage serialized_msg(*bag_msg_serialized->serialized_data);
-      auto                      joint_state_msg = std::make_shared<sensor_msgs::msg::JointState>();
+      auto                      deserialized_msg = std::make_shared<RecordedTopicMsg>();
 
       // Deserialize the message and check that deserialization is successful
       try {
-        joint_state_serialization_.deserialize_message(&serialized_msg, joint_state_msg.get());
+        recorded_topic_msg_serialization_.deserialize_message(&serialized_msg, deserialized_msg.get());
       } catch (const std::exception &error) {
         // TODO: Stop the controller gracefully if the last message in the bag is met, instead of spamming errors
         RCLCPP_ERROR(get_node()->get_logger(), "Error while deserializing bag message, error: %s", error.what());
@@ -223,7 +217,7 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
 
       // Store the joint positions in the bag message as desired joint positions
       for (size_t i = 0; i < N_JOINTS; i++) {
-        joint_positions_desired(static_cast<int>(i)) = joint_state_msg->position.at(i);
+        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->measured_joint_state.position.at(i);
       }
 
       break;  // We have found the next desired joint position, stop the loop
@@ -235,13 +229,6 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
     RCLCPP_ERROR(get_node()->get_logger(), "Could not read next command from the bag");
     return controller_interface::return_type::ERROR;
   }
-
-  // Only command the first joint to move
-  // for (size_t i = 0; i < N_JOINTS; i++) {
-  //   if (i != 0) {
-  //     joint_positions_desired(static_cast<int>(i)) = joint_positions_init_(static_cast<int>(i));
-  //   }
-  // }
 
   // Filter the joint velocities
   joint_velocities_curr_filtered_ = (1 - VELOCITY_FILTER_ALPHA_GAIN) * joint_velocities_curr_filtered_ +
