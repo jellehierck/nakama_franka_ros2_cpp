@@ -50,7 +50,7 @@ nakama_franka_controllers::BagRecorderController::state_interface_configuration(
 
 controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderController::on_init() {
   try {
-    auto_declare<std::string>(RECORD_TOPIC_PARAMETER_NAME, DEFAULT_RECORD_TOPIC_NAME);
+    auto_declare<std::string>("record_topic", DEFAULT_RECORD_TOPIC_NAME);
   } catch (const std::exception &e) {
     (void)fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -62,7 +62,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderContr
   const rclcpp_lifecycle::State & /*previous_state*/
 ) {
   // Get and store the topic name
-  bag_record_topic_name_ = get_node()->get_parameter(RECORD_TOPIC_PARAMETER_NAME).as_string();
+  bag_record_topic_name_ = get_node()->get_parameter("recor_topic").as_string();
 
   // Initialize the writer
   bag_writer_ = std::make_unique<rosbag2_cpp::Writer>();
@@ -207,6 +207,4 @@ void nakama_franka_controllers::BagRecorderController::force_stop_recording() {
 #include <controller_interface/controller_interface.hpp>
 #include <pluginlib/class_list_macros.hpp>
 
-PLUGINLIB_EXPORT_CLASS(
-  nakama_franka_controllers::BagRecorderController, controller_interface::ControllerInterface
-)
+PLUGINLIB_EXPORT_CLASS(nakama_franka_controllers::BagRecorderController, controller_interface::ControllerInterface)
