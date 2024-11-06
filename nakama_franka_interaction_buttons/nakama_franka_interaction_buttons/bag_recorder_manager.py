@@ -102,9 +102,19 @@ class BagRecorderManager(Node):
         self.get_logger().info(f"Changed to state: {self._state}")
 
     def set_button_color_from_state(self, state: BagRecorderManagerStates) -> None:
-        # TODO: Maybe set same color but different effect for transition states?
+        if state == BagRecorderManagerStates.ERROR:
+            self.set_button_color_service.call_async(
+                set_color_request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    node_ids=[],  # TODO: Target specific button?
+                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
+                    color=BeeButtonColor(value=BeeButtonColor.RED),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
 
-        if state == BagRecorderManagerStates.IDLE:
+        elif state == BagRecorderManagerStates.IDLE:
             self.set_button_color_service.call_async(
                 set_color_request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -135,6 +145,19 @@ class BagRecorderManager(Node):
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.PURPLE),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        elif str(state).startswith("starting") or str(state).startswith("stopping"):
+            # All transition states will show the same color effect
+            self.set_button_color_service.call_async(
+                set_color_request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    node_ids=[],  # TODO: Target specific button?
+                    effect=BeeButtonSetColor.Request.EFFECT_BLINK,
+                    color=BeeButtonColor(value=BeeButtonColor.YELLOW),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
                 done_callback=None,  # We do not care about the result of setting the color
@@ -195,12 +218,10 @@ class BagRecorderManager(Node):
             self.get_logger().error(
                 f"Could not load {self.recorder_controller_param.get_parameter_value().string_value}"
             )
-            # TODO: Perhaps trigger button colors to switch?
-            # TODO: Define which state to enter or quit
-            return
+            self.state = BagRecorderManagerStates.ERROR
 
-        # Switch state
-        self.state = BagRecorderManagerStates.TRAINING_IDLE
+        else:
+            self.state = BagRecorderManagerStates.TRAINING_IDLE
 
     def stop_training(self) -> None:
         """Enter the `STOPPING_TRAINING` transition state."""
@@ -224,12 +245,10 @@ class BagRecorderManager(Node):
             self.get_logger().error(
                 f"Could not unload {self.recorder_controller_param.get_parameter_value().string_value}"
             )
-            # TODO: Perhaps trigger button colors to switch?
-            # TODO: Define which state to enter or quit
-            return
+            self.state = BagRecorderManagerStates.ERROR
 
-        # Switch state
-        self.state = BagRecorderManagerStates.IDLE
+        else:
+            self.state = BagRecorderManagerStates.IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state."""
@@ -255,12 +274,12 @@ class BagRecorderManager(Node):
 
         if response is None or not response.started:
             self.get_logger().error("Could not start recording")
-            # TODO: Perhaps trigger button colors to switch?
-            # TODO: Define which state to enter or quit
-            return
+            self.state = BagRecorderManagerStates.ERROR
 
-        # Switch state
-        self.state = BagRecorderManagerStates.RECORDING
+        else:
+            # TODO: Store opened bag URI
+            todo = response.opened_bag_uri
+            self.state = BagRecorderManagerStates.RECORDING
 
     def stop_recording(self) -> None:
         """Enter the `STOPPING_RECORDING` transition state."""
@@ -282,12 +301,10 @@ class BagRecorderManager(Node):
 
         if response is None:
             self.get_logger().error("Could not stop recording")
-            # TODO: Perhaps trigger button colors to switch?
-            # TODO: Define which state to enter or quit
-            return
+            self.state = BagRecorderManagerStates.ERROR
 
-        # Switch state
-        self.state = BagRecorderManagerStates.TRAINING_IDLE
+        else:
+            self.state = BagRecorderManagerStates.TRAINING_IDLE
 
 
 def main(args=None):
