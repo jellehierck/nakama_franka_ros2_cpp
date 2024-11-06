@@ -56,39 +56,57 @@ class BagRecorderManager(Node):
             ),
         )
 
+        self.wait_for_services_param = self.declare_parameter(
+            name="wait_for_services",
+            value=True,
+            descriptor=ParameterDescriptor(
+                description="Whether to wait for required services to become available on startup.",
+                read_only=True,  # Only takes effect when the node is started
+            ),
+        )
+
+        # Create service clients to be able to make service requests
+        def wait_for_service(client_wrapper: AsyncClientWrapper) -> None:
+            """Helper function to wait on the service to become availabe if `wait_for_services` parameter is True."""
+            if self.wait_for_services_param.get_parameter_value().bool_value:
+                # Wait for some seconds before logging a new message that the service is unavailable
+                while not client_wrapper.client.wait_for_service(timeout_sec=2.0):
+                    self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
+
+        # Controller manager services
+        self.load_controller_service = AsyncClientWrapper(
+            self.create_client(LoadController, srv_name="controller_manager/load_controller")
+        )
+        wait_for_service(self.load_controller_service)
+
+        self.unload_controller_service = AsyncClientWrapper(
+            self.create_client(UnloadController, srv_name="controller_manager/unload_controller")
+        )
+        wait_for_service(self.unload_controller_service)
+
+        # Bag recorder services
+        self.start_recording_service = AsyncClientWrapper(
+            self.create_client(StartBagRecording, srv_name="start_recording")
+        )
+        wait_for_service(self.start_recording_service)
+
+        self.stop_recording_service = AsyncClientWrapper(
+            self.create_client(StartBagRecording, srv_name="stop_recording")
+        )
+        wait_for_service(self.stop_recording_service)
+
+        # Button color services
+        self.set_button_color_service = AsyncClientWrapper(
+            self.create_client(BeeButtonSetColor, srv_name="set_button_color")
+        )
+        wait_for_service(self.set_button_color_service)
+
         # Create subscriptions
         self.button_press_subscription = self.create_subscription(
             BeeButtonPress,
             "button_press",
             self.handle_button_press,
         )
-
-        # Create service clients to be able to make service requests
-        # Controller manager services
-        self.load_controller_service = AsyncClientWrapper(
-            self.create_client(LoadController, srv_name="controller_manager/load_controller")
-        )
-        self.unload_controller_service = AsyncClientWrapper(
-            self.create_client(UnloadController, srv_name="controller_manager/unload_controller")
-        )
-
-        # Bag recorder services
-        self.start_recording_service = AsyncClientWrapper(
-            self.create_client(StartBagRecording, srv_name="start_recording")
-        )
-        self.stop_recording_service = AsyncClientWrapper(
-            self.create_client(StartBagRecording, srv_name="stop_recording")
-        )
-
-        # Button color services
-        self.set_button_color_service = AsyncClientWrapper(
-            self.create_client(BeeButtonSetColor, srv_name="set_button_color")
-        )
-
-        # Check that the services are available before continuing
-        # TODO: Remove or make configurable?
-        while not self.load_controller_service.client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info("service not available, waiting again...")
 
     @property
     def state(self) -> BagRecorderManagerStates:
