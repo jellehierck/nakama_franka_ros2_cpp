@@ -24,8 +24,11 @@
   <exec_depend>franka_hardware</exec_depend>
   <exec_depend>franka_robot_state_broadcaster</exec_depend>
 
+  <exec_depend>bee_buttons</exec_depend>
+
   <exec_depend>nakama_franka_bag</exec_depend>
   <exec_depend>nakama_franka_controllers</exec_depend>
+  <exec_depend>nakama_franka_interaction_buttons</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

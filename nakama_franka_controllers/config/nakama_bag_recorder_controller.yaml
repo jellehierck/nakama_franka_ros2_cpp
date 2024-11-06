@@ -1,0 +1,8 @@
+nakama_bag_recorder_controller:
+  ros__parameters:
+    # Controller type
+    type: nakama_franka_controllers/BagRecorderController
+
+    # Controller-specific parameters
+    # Which topic in the bag to record joint state commands to
+    record_topic: /joint_state_commands
