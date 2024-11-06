@@ -3,28 +3,39 @@ from enum import StrEnum, auto
 import rclpy
 from rclpy.node import Node
 from rclpy.task import Future
-from rclpy.callback_groups import ReentrantCallbackGroup
-
+from rcl_interfaces.msg import ParameterDescriptor
 from builtin_interfaces.msg import Duration
 
 from controller_manager_msgs.srv import SwitchController, LoadController, UnloadController
 
-from bee_buttons_interfaces.msg import BeeButtonPress
+from bee_buttons_interfaces.msg import BeeButtonPress, BeeButtonColor
 from bee_buttons_interfaces.srv import BeeButtonSetColor
+
+from nakama_franka_interfaces.srv import StartBagRecording, StopBagRecording
+
+from nakama_franka_ros2_cpp.nakama_franka_interaction_buttons.nakama_franka_interaction_buttons.client_wrapper import (
+    AsyncClientWrapper,
+)
 
 
 class BagRecorderManagerStates(StrEnum):
     IDLE = auto()
 
+    ERROR = auto()
+
     PLAYING_BACK = auto()
     STOPPING_PLAYBACK = auto()
     STARTING_PLAYBACK = auto()
+
+    TRAINING_IDLE = auto()
+    STARTING_TRAINING = auto()
+    STOPPING_TRAINING = auto()
 
     RECORDING = auto()
     STOPPING_RECORDING = auto()
     STARTING_RECORDING = auto()
 
-    HOMING = auto()
+    TRAINING_HOMING = auto()
     STOPPING_HOMING = auto()
     STARTING_HOMING = auto()
 
@@ -33,7 +44,17 @@ class BagRecorderManager(Node):
     def __init__(self):
         super().__init__("bag_recorder_manager")
 
-        self.state = BagRecorderManagerStates.IDLE
+        # Initialize the state
+        self._state = BagRecorderManagerStates.IDLE
+
+        # Declare parameters
+        self.recorder_controller_param = self.declare_parameter(
+            name="recorder_controller",
+            value="nakama_bag_recorder_controller",
+            descriptor=ParameterDescriptor(
+                description="Name of the recorder controller to be loaded into the controller manager",
+            ),
+        )
 
         # Create subscriptions
         self.button_press_subscription = self.create_subscription(
@@ -43,82 +64,230 @@ class BagRecorderManager(Node):
         )
 
         # Create service clients to be able to make service requests
-        # TODO: Make controller manager node name configurable with parameter? With namespacing perhaps
-        self.controller_manager_load_controller_service_client = self.create_client(
-            LoadController,
-            "/controller_manager/load_controller",
+        # Controller manager services
+        self.load_controller_service = AsyncClientWrapper(
+            self.create_client(LoadController, srv_name="controller_manager/load_controller")
         )
-        self.controller_manager_load_controller_future: Future | None = None
+        self.unload_controller_service = AsyncClientWrapper(
+            self.create_client(UnloadController, srv_name="controller_manager/unload_controller")
+        )
+
+        # Bag recorder services
+        self.start_recording_service = AsyncClientWrapper(
+            self.create_client(StartBagRecording, srv_name="start_recording")
+        )
+        self.stop_recording_service = AsyncClientWrapper(
+            self.create_client(StartBagRecording, srv_name="stop_recording")
+        )
+
+        # Button color services
+        self.set_button_color_service = AsyncClientWrapper(
+            self.create_client(BeeButtonSetColor, srv_name="set_button_color")
+        )
 
         # Check that the services are available before continuing
         # TODO: Remove or make configurable?
-        while not self.controller_manager_switch_controller_service.wait_for_service(timeout_sec=1.0):
+        while not self.load_controller_service.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info("service not available, waiting again...")
 
-    def handle_finished_controller_manager_service_call(self) -> None:
-        pass
+    @property
+    def state(self) -> BagRecorderManagerStates:
+        """Get the current state"""
+        return self._state
+
+    @state.setter
+    def state(self, new_state: BagRecorderManagerStates) -> None:
+        """Set a new state. This will also change the interaction button color depending on the new state"""
+        self._state = new_state
+        self.get_logger().info(f"Changed to state: {self._state}")
+
+    def set_button_color_from_state(self, state: BagRecorderManagerStates) -> None:
+        # TODO: Maybe set same color but different effect for transition states?
+
+        if state == BagRecorderManagerStates.IDLE:
+            self.set_button_color_service.call_async(
+                set_color_request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    node_ids=[],  # TODO: Target specific button?
+                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
+                    color=BeeButtonColor(value=BeeButtonColor.GREEN),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        elif state == BagRecorderManagerStates.TRAINING_IDLE:
+            self.set_button_color_service.call_async(
+                set_color_request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    node_ids=[],  # TODO: Target specific button?
+                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
+                    color=BeeButtonColor(value=BeeButtonColor.BLUE),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        elif state == BagRecorderManagerStates.RECORDING:
+            self.set_button_color_service.call_async(
+                set_color_request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    node_ids=[],  # TODO: Target specific button?
+                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
+                    color=BeeButtonColor(value=BeeButtonColor.PURPLE),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        else:
+            self.get_logger().warn(f"Cannot set button color for state {state}")
 
     def handle_button_press(self, msg: BeeButtonPress) -> None:
         # Check that the button press comes from the correct button
         # TODO: Make node ID configurable
-        if msg.node_id != "443":
-            self.get_logger().warn(f"Got button press from button {msg.node_id} which this node does not listen to")
-            return
+        # if msg.node_id != "443":
+        #     self.get_logger().warn(f"Got button press from button {msg.node_id} which this node does not listen to")
+        #     return
 
-        # Take action depending on how the button is pressed
-        if msg.press_type == BeeButtonPress.PRESSED:
-            pass
+        # Define which specific button press types are handled in specific states
+        if self.state == BagRecorderManagerStates.IDLE:
+            if msg.press_type == BeeButtonPress.LONG_PRESS:
+                self.start_training()
+                return
 
-        elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
-            pass
-
-        elif msg.press_type == BeeButtonPress.LONG_PRESS:
-            if self.state == BagRecorderManagerStates.IDLE:
-                # Move STARTING_RECORDING state
+        if self.state == BagRecorderManagerStates.TRAINING_IDLE:
+            if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_recording()
-                pass
+                return
 
-            if self.state == BagRecorderManagerStates.RECORDING:
-                # Move into STOPPING_RECORDING state
-                pass
+            elif msg.press_type == BeeButtonPress.LONG_PRESS:
+                self.stop_training()
+                return
 
-        else:
-            self.get_logger().warn(f"Got unknown press type {msg.press_type}")
-            return
+        if self.state == BagRecorderManagerStates.RECORDING:
+            if msg.press_type == BeeButtonPress.PRESSED:
+                self.stop_recording()
+                return
 
-    def start_recording(self) -> None:
-        self.state = BagRecorderManagerStates.STARTING_RECORDING
-        self.controller_manager_load_controller_future = self.load_recording_controller()
-        self.controller_manager_load_controller_future.add_done_callback(self.start_recording_finished)
+        # The current combination of state and button press type has no effect
+        self.get_logger().warn(f"Button press type {msg.press_type} has no effect in state {self._state}")
 
-    def load_recording_controller(self) -> Future:
-        request = LoadController.Request(
-            # TODO: Make controller name a parameter
-            name="nakama_bag_recorder_controller"
-        )
+    def start_training(self) -> None:
+        """Enter the `STARTING_TRAINING` transition state."""
+        self.state = BagRecorderManagerStates.STARTING_TRAINING
+        request = LoadController.Request(name=self.recorder_controller_param.get_parameter_value().string_value)
+        self.load_controller_service.call_async(request, done_callback=self.start_training_finished)
 
-        # Return the future created by calling the service
-        return self.controller_manager_load_controller_service_client.call_async(request)
+    def start_training_finished(self, resolved_future: Future) -> None:
+        """
+        End of the `STARTING_TRAINING` transition phase.
 
-    def start_recording_finished(self, future: Future) -> None:
-        response: LoadController.Response | None = future.result()
+        Possible next states:
+        - `LoadController` response indicated success: `TRAINING_IDLE`
+        - `LoadController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to load the recorder controller.
+        """
+        response: LoadController.Response | None = resolved_future.result()
 
         if response is None or not response.ok:
-            # TODO: Add controller names to the log statement
-            self.get_logger().error("Could not switch the recorder controller in and the playback recorder out")
-
+            self.get_logger().error(
+                f"Could not load {self.recorder_controller_param.get_parameter_value().string_value}"
+            )
             # TODO: Perhaps trigger button colors to switch?
+            # TODO: Define which state to enter or quit
+            return
 
-        else:
-            self.state = BagRecorderManagerStates.RECORDING
-            # TODO: Add controller names to the log statement
-            self.get_logger().info("Recorder controller switched in, playback recorder switched out")
+        # Switch state
+        self.state = BagRecorderManagerStates.TRAINING_IDLE
 
-            # TODO: Trigger button colors to switch
+    def stop_training(self) -> None:
+        """Enter the `STOPPING_TRAINING` transition state."""
+        self.state = BagRecorderManagerStates.STOPPING_TRAINING
+        request = UnloadController.Request(self.recorder_controller_param.get_parameter_value().string_value)
+        self.unload_controller_service.call_async(request, done_callback=self.stop_training_finished)
 
-        # Return the future created by calling the service
-        future = self.controller_manager_load_controller_service_client.call_async(request)
-        future.add_done_callback(self.start_recording_finished)
+    def stop_training_finished(self, resolved_future: Future) -> None:
+        """
+        End of the `STOPPING_TRAINING` transition phase.
+
+        Possible next states:
+        - `UnloadController` response indicated success: `IDLE`
+        - `UnloadController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to unload the recorder controller.
+        """
+        response: UnloadController.Response | None = resolved_future.result()
+
+        if response is None or not response.ok:
+            self.get_logger().error(
+                f"Could not unload {self.recorder_controller_param.get_parameter_value().string_value}"
+            )
+            # TODO: Perhaps trigger button colors to switch?
+            # TODO: Define which state to enter or quit
+            return
+
+        # Switch state
+        self.state = BagRecorderManagerStates.IDLE
+
+    def start_recording(self) -> None:
+        """Enter the `STARTING_RECORDING` transition state."""
+        self.state = BagRecorderManagerStates.STARTING_RECORDING
+        request = StartBagRecording.Request(
+            bag_path="recordings/",
+            bag_name="recording",  # TODO: Create better bag name, perhaps based on participant etc
+            append_timestamp=False,
+        )
+        self.start_recording_service.call_async(request, done_callback=self.start_recording_finished)
+
+    def start_recording_finished(self, resolved_future: Future) -> None:
+        """
+        End of the `STARTING_RECORDING` transition phase.
+
+        Possible next states:
+        - `StartBagRecording` response indicated success: `RECORDING`
+        - `StartBagRecording` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
+        """
+        response: StartBagRecording.Response | None = resolved_future.result()
+
+        if response is None or not response.started:
+            self.get_logger().error("Could not start recording")
+            # TODO: Perhaps trigger button colors to switch?
+            # TODO: Define which state to enter or quit
+            return
+
+        # Switch state
+        self.state = BagRecorderManagerStates.RECORDING
+
+    def stop_recording(self) -> None:
+        """Enter the `STOPPING_RECORDING` transition state."""
+        self.state = BagRecorderManagerStates.STOPPING_RECORDING
+        request = StopBagRecording.Request()
+        self.stop_recording_service.call_async(request, done_callback=self.stop_recording_finished)
+
+    def stop_recording_finished(self, resolved_future: Future) -> None:
+        """
+        End of the `STOPPING_RECORDING` transition phase.
+
+        Possible next states:
+        - `StopBagRecording` response indicated success: `TRAINING_IDLE`
+        - `StopBagRecording` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
+        """
+        response: StopBagRecording.Response | None = resolved_future.result()
+
+        if response is None:
+            self.get_logger().error("Could not stop recording")
+            # TODO: Perhaps trigger button colors to switch?
+            # TODO: Define which state to enter or quit
+            return
+
+        # Switch state
+        self.state = BagRecorderManagerStates.TRAINING_IDLE
 
 
 def main(args=None):
