@@ -178,6 +178,7 @@ void nakama_franka_controllers::BagRecorderController::start_recording(
   // Bagfile is opened succesfully
   recording_started_.store(true);
   response->started = true;
+  response->opened_bag_uri = bagfile_uri;
   RCLCPP_INFO(get_node()->get_logger(), "Started recording bag to path %s", bagfile_uri.c_str());
 }
 

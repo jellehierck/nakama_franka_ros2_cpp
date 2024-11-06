@@ -17,3 +17,7 @@ bool append_timestamp true
 
 # Result is whether the bag is opened or not.
 bool started
+
+# Revoled URI to opened bag.
+# This can be used to access the same bag elsewhere, even if e.g. a timestamp was appended.
+string opened_bag_uri
