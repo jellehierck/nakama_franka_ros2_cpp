@@ -21,3 +21,6 @@ ruff.toml
 .clang-format
 .clang-tidy
 .clangd
+
+# Draw io artefacts
+.$*.bkp
