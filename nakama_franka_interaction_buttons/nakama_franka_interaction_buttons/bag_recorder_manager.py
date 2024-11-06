@@ -1,24 +1,23 @@
 from enum import StrEnum, auto
 
 import rclpy
+from builtin_interfaces.msg import Duration
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.task import Future
-from rcl_interfaces.msg import ParameterDescriptor
-from builtin_interfaces.msg import Duration
 
-from controller_manager_msgs.srv import SwitchController, LoadController, UnloadController
+from controller_manager_msgs.srv import LoadController, SwitchController, UnloadController
 
-from bee_buttons_interfaces.msg import BeeButtonPress, BeeButtonColor
+from bee_buttons_interfaces.msg import BeeButtonColor, BeeButtonPress
 from bee_buttons_interfaces.srv import BeeButtonSetColor
 
+from nakama_franka_interaction_buttons.client_wrapper import AsyncClientWrapper
 from nakama_franka_interfaces.srv import StartBagRecording, StopBagRecording
 
-from nakama_franka_ros2_cpp.nakama_franka_interaction_buttons.nakama_franka_interaction_buttons.client_wrapper import (
-    AsyncClientWrapper,
-)
 
+class BagRecorderManagerState(StrEnum):
+    """Possible states for the BagRecorderManager."""
 
-class BagRecorderManagerStates(StrEnum):
     IDLE = auto()
 
     ERROR = auto()
@@ -41,11 +40,17 @@ class BagRecorderManagerStates(StrEnum):
 
 
 class BagRecorderManager(Node):
-    def __init__(self):
+    """Bag recorder manager node.
+
+    This node will manage controllers and buttons record and play back franka motions.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the BagRecoderManager node."""
         super().__init__("bag_recorder_manager")
 
         # Initialize the state
-        self._state = BagRecorderManagerStates.IDLE
+        self._state = BagRecorderManagerState.IDLE
 
         # Declare parameters
         self.recorder_controller_param = self.declare_parameter(
@@ -109,18 +114,19 @@ class BagRecorderManager(Node):
         )
 
     @property
-    def state(self) -> BagRecorderManagerStates:
-        """Get the current state"""
+    def state(self) -> BagRecorderManagerState:
+        """Get the current state."""
         return self._state
 
     @state.setter
-    def state(self, new_state: BagRecorderManagerStates) -> None:
-        """Set a new state. This will also change the interaction button color depending on the new state"""
+    def state(self, new_state: BagRecorderManagerState) -> None:
+        """Set a new state. This will also change the interaction button color depending on the new state."""
         self._state = new_state
         self.get_logger().info(f"Changed to state: {self._state}")
 
-    def set_button_color_from_state(self, state: BagRecorderManagerStates) -> None:
-        if state == BagRecorderManagerStates.ERROR:
+    def set_button_color_from_state(self, state: BagRecorderManagerState) -> None:
+        """Send a button color effect request based on a state."""
+        if state == BagRecorderManagerState.ERROR:
             self.set_button_color_service.call_async(
                 set_color_request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -132,7 +138,7 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == BagRecorderManagerStates.IDLE:
+        elif state == BagRecorderManagerState.IDLE:
             self.set_button_color_service.call_async(
                 set_color_request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -144,7 +150,7 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == BagRecorderManagerStates.TRAINING_IDLE:
+        elif state == BagRecorderManagerState.TRAINING_IDLE:
             self.set_button_color_service.call_async(
                 set_color_request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -156,7 +162,7 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == BagRecorderManagerStates.RECORDING:
+        elif state == BagRecorderManagerState.RECORDING:
             self.set_button_color_service.call_async(
                 set_color_request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -185,6 +191,10 @@ class BagRecorderManager(Node):
             self.get_logger().warn(f"Cannot set button color for state {state}")
 
     def handle_button_press(self, msg: BeeButtonPress) -> None:
+        """Handle incoming button press messages.
+
+        This will trigger state transitions based on the press type and current state.
+        """
         # Check that the button press comes from the correct button
         # TODO: Make node ID configurable
         # if msg.node_id != "443":
@@ -192,21 +202,21 @@ class BagRecorderManager(Node):
         #     return
 
         # Define which specific button press types are handled in specific states
-        if self.state == BagRecorderManagerStates.IDLE:
+        if self.state == BagRecorderManagerState.IDLE:  # noqa: SIM102
             if msg.press_type == BeeButtonPress.LONG_PRESS:
                 self.start_training()
                 return
 
-        if self.state == BagRecorderManagerStates.TRAINING_IDLE:
+        if self.state == BagRecorderManagerState.TRAINING_IDLE:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_recording()
                 return
 
-            elif msg.press_type == BeeButtonPress.LONG_PRESS:
+            elif msg.press_type == BeeButtonPress.LONG_PRESS:  # noqa: RET505
                 self.stop_training()
                 return
 
-        if self.state == BagRecorderManagerStates.RECORDING:
+        if self.state == BagRecorderManagerState.RECORDING:  # noqa: SIM102
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.stop_recording()
                 return
@@ -216,13 +226,12 @@ class BagRecorderManager(Node):
 
     def start_training(self) -> None:
         """Enter the `STARTING_TRAINING` transition state."""
-        self.state = BagRecorderManagerStates.STARTING_TRAINING
+        self.state = BagRecorderManagerState.STARTING_TRAINING
         request = LoadController.Request(name=self.recorder_controller_param.get_parameter_value().string_value)
         self.load_controller_service.call_async(request, done_callback=self.start_training_finished)
 
     def start_training_finished(self, resolved_future: Future) -> None:
-        """
-        End of the `STARTING_TRAINING` transition phase.
+        """End of the `STARTING_TRAINING` transition phase.
 
         Possible next states:
         - `LoadController` response indicated success: `TRAINING_IDLE`
@@ -236,20 +245,19 @@ class BagRecorderManager(Node):
             self.get_logger().error(
                 f"Could not load {self.recorder_controller_param.get_parameter_value().string_value}"
             )
-            self.state = BagRecorderManagerStates.ERROR
+            self.state = BagRecorderManagerState.ERROR
 
         else:
-            self.state = BagRecorderManagerStates.TRAINING_IDLE
+            self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def stop_training(self) -> None:
         """Enter the `STOPPING_TRAINING` transition state."""
-        self.state = BagRecorderManagerStates.STOPPING_TRAINING
+        self.state = BagRecorderManagerState.STOPPING_TRAINING
         request = UnloadController.Request(self.recorder_controller_param.get_parameter_value().string_value)
         self.unload_controller_service.call_async(request, done_callback=self.stop_training_finished)
 
     def stop_training_finished(self, resolved_future: Future) -> None:
-        """
-        End of the `STOPPING_TRAINING` transition phase.
+        """End of the `STOPPING_TRAINING` transition phase.
 
         Possible next states:
         - `UnloadController` response indicated success: `IDLE`
@@ -263,14 +271,14 @@ class BagRecorderManager(Node):
             self.get_logger().error(
                 f"Could not unload {self.recorder_controller_param.get_parameter_value().string_value}"
             )
-            self.state = BagRecorderManagerStates.ERROR
+            self.state = BagRecorderManagerState.ERROR
 
         else:
-            self.state = BagRecorderManagerStates.IDLE
+            self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state."""
-        self.state = BagRecorderManagerStates.STARTING_RECORDING
+        self.state = BagRecorderManagerState.STARTING_RECORDING
         request = StartBagRecording.Request(
             bag_path="recordings/",
             bag_name="recording",  # TODO: Create better bag name, perhaps based on participant etc
@@ -279,8 +287,7 @@ class BagRecorderManager(Node):
         self.start_recording_service.call_async(request, done_callback=self.start_recording_finished)
 
     def start_recording_finished(self, resolved_future: Future) -> None:
-        """
-        End of the `STARTING_RECORDING` transition phase.
+        """End of the `STARTING_RECORDING` transition phase.
 
         Possible next states:
         - `StartBagRecording` response indicated success: `RECORDING`
@@ -292,22 +299,21 @@ class BagRecorderManager(Node):
 
         if response is None or not response.started:
             self.get_logger().error("Could not start recording")
-            self.state = BagRecorderManagerStates.ERROR
+            self.state = BagRecorderManagerState.ERROR
 
         else:
             # TODO: Store opened bag URI
             todo = response.opened_bag_uri
-            self.state = BagRecorderManagerStates.RECORDING
+            self.state = BagRecorderManagerState.RECORDING
 
     def stop_recording(self) -> None:
         """Enter the `STOPPING_RECORDING` transition state."""
-        self.state = BagRecorderManagerStates.STOPPING_RECORDING
+        self.state = BagRecorderManagerState.STOPPING_RECORDING
         request = StopBagRecording.Request()
         self.stop_recording_service.call_async(request, done_callback=self.stop_recording_finished)
 
     def stop_recording_finished(self, resolved_future: Future) -> None:
-        """
-        End of the `STOPPING_RECORDING` transition phase.
+        """End of the `STOPPING_RECORDING` transition phase.
 
         Possible next states:
         - `StopBagRecording` response indicated success: `TRAINING_IDLE`
@@ -319,13 +325,13 @@ class BagRecorderManager(Node):
 
         if response is None:
             self.get_logger().error("Could not stop recording")
-            self.state = BagRecorderManagerStates.ERROR
+            self.state = BagRecorderManagerState.ERROR
 
         else:
-            self.state = BagRecorderManagerStates.TRAINING_IDLE
+            self.state = BagRecorderManagerState.TRAINING_IDLE
 
 
-def main(args=None):
+def main(args: list[str] | None = None) -> None:
     """Start the node."""
     try:
         rclpy.init(args=args)
@@ -335,10 +341,6 @@ def main(args=None):
     except KeyboardInterrupt:
         # Keyboard interrupts cause the program to stop gracefully
         pass
-
-    except Exception as error:
-        # All other errors must be reported
-        print(error)
 
     finally:
         rclpy.shutdown()
