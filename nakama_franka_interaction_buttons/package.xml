@@ -7,12 +7,20 @@
   <maintainer email="j.j.hierck@student.utwente.nl">Jelle Hierck</maintainer>
   <license>MIT</license>
 
-  <depend>rclpy</depend>
+  <!-- ROS built-in dependencies -->
+  <exec_depend>rclpy</exec_depend>
+
+  <!-- Third-party ROS dependencies -->
+  <depend>controller_manager_msgs</depend>
+
+  <!-- First-party ROS dependencies -->
   <depend>bee_buttons_interfaces</depend>
   <depend>nakama_franka_interfaces</depend>
   <depend>nakama_franka_controllers</depend>
-  <depend>controller_manager_msgs</depend>
 
+  <!-- Pure python dependencies -->
+
+  <!-- Test dependencies -->
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
