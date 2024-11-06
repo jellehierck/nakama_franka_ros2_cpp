@@ -1,4 +1,4 @@
-from enum import StrEnum, auto
+from enum import auto
 
 import rclpy
 from builtin_interfaces.msg import Duration
@@ -11,8 +11,10 @@ from controller_manager_msgs.srv import LoadController, SwitchController, Unload
 from bee_buttons_interfaces.msg import BeeButtonColor, BeeButtonPress
 from bee_buttons_interfaces.srv import BeeButtonSetColor
 
-from nakama_franka_interaction_buttons.client_wrapper import AsyncClientWrapper
 from nakama_franka_interfaces.srv import StartBagRecording, StopBagRecording
+
+from .client_wrapper import AsyncClientWrapper
+from .strenum import StrEnum
 
 
 class BagRecorderManagerState(StrEnum):
