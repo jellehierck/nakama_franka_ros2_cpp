@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
-#include <sensor_msgs/msg/detail/joint_state__struct.hpp>
 #include <string>
 
 #include <Eigen/Eigen>
@@ -39,8 +38,6 @@ class BagRecorderController : public controller_interface::ControllerInterface {
  public:
   /// Set the type of the recorded message
   using RecordedTopicMsg = sensor_msgs::msg::JointState;
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // using RecordedTopicMsg = franka_msgs::msg::FrankaRobotState;
 
   /// Default recording topic name to which the recorded messages are stored
   static constexpr const char *DEFAULT_RECORD_TOPIC_NAME = "/robot_state";
@@ -126,9 +123,6 @@ class BagRecorderController : public controller_interface::ControllerInterface {
    * Force stop the recording without checking if it was still running.
    */
   void force_stop_recording();
-
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // std::unique_ptr<franka_semantic_components::FrankaRobotState> franka_robot_semantic_component_;
 
   std::string                          bag_record_topic_name_;
   rosbag2_storage::StorageOptions      bag_storage_options_;

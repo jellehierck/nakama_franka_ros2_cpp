@@ -12,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <rclcpp/executors.hpp>
 #include <rclcpp/logging.hpp>
@@ -33,7 +34,6 @@
 
 #include <nakama_franka_interfaces/srv/start_bag_recording.hpp>
 #include <nakama_franka_interfaces/srv/stop_bag_recording.hpp>
-#include <vector>
 
 nakama_franka_controllers::BagRecorderController::BagRecorderController() = default;
 
@@ -46,10 +46,6 @@ controller_interface::InterfaceConfiguration
 nakama_franka_controllers::BagRecorderController::state_interface_configuration() const {
   controller_interface::InterfaceConfiguration state_interfaces_config;
   state_interfaces_config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // state_interfaces_config.names = franka_robot_semantic_component_->get_state_interface_names();
-
   for (size_t i = 1; i <= N_JOINTS; i++) {
     state_interfaces_config.names.push_back("fr3_joint" + std::to_string(i) + "/position");
   }
@@ -107,9 +103,6 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderContr
 controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderController::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/
 ) {
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // franka_robot_semantic_component_->assign_loaned_state_interfaces(state_interfaces_);
-
   return CallbackReturn::SUCCESS;
 }
 
@@ -122,34 +115,25 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagRecorderContr
     );
     force_stop_recording();
   }
-
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // franka_robot_semantic_component_->release_interfaces();
-
   return CallbackReturn::SUCCESS;
 }
 
 controller_interface::return_type nakama_franka_controllers::BagRecorderController::update(
   const rclcpp::Time &time, const rclcpp::Duration & /*period*/
 ) {
-  // TODO: Semantic component disabled because it does not work with fake hardware
-  // // TODO: Possibly initialize this message in header file to prevent reallocation in every control update step
-  // franka_msgs::msg::FrankaRobotState robot_state_msg;
-  // franka_robot_semantic_component_->get_values_as_message(robot_state_msg);
-  // // TODO: Convert robot state to other message format to only extract relevant information
-  sensor_msgs::msg::JointState joint_state_msg;
+  auto joint_state_msg = sensor_msgs::msg::JointState();
+  joint_state_msg.header.stamp = time;
+  // Initialize the position vector, which is required to prevent unallocated access
   joint_state_msg.position = std::vector<double>(N_JOINTS, 0.0);
   for (size_t i = 0; i < N_JOINTS; i++) {
     const auto &position_interface = state_interfaces_.at(i);
-
+    assert(position_interface.get_interface_name() == "position");
     joint_state_msg.position[i] = position_interface.get_value();
   }
 
   try {
     // Only write to the bag if the recording is started
     if (recording_started_.load(std::memory_order_relaxed)) {
-      // TODO: Semantic component disabled because it does not work with fake hardware
-      // bag_writer_->write<RecordedTopicMsg>(robot_state_msg, bag_record_topic_name_, time);
       bag_writer_->write<RecordedTopicMsg>(joint_state_msg, bag_record_topic_name_, time);
     }
 
