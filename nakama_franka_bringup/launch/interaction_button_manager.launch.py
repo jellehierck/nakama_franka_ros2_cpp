@@ -96,23 +96,10 @@ def generate_launch_description():  # noqa: ANN201, D103
                 ],
                 output="screen",
             ),
-            # Load the recorder controller
+            # Load the joint state bag recorder
             Node(
-                package="controller_manager",
-                executable="spawner",
-                arguments=[
-                    "nakama_bag_recorder_controller",
-                    "--load-only",  # Important: load the controller but do not configure
-                    # "--inactive",  # Important: load the controller but do not configure
-                    "--param-file",
-                    PathJoinSubstitution(
-                        [
-                            FindPackageShare("nakama_franka_controllers"),
-                            "config",
-                            "nakama_bag_recorder_controller.yaml",
-                        ]
-                    ),
-                ],
+                package="nakama_franka_bag",
+                executable="joint_state_bag_recorder",
                 output="screen",
             ),
             # Interaction button node

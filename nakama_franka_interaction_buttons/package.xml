@@ -15,6 +15,7 @@
 
   <!-- First-party ROS dependencies -->
   <depend>bee_buttons_interfaces</depend>
+  <depend>nakama_franka_bag</depend>
   <depend>nakama_franka_interfaces</depend>
   <depend>nakama_franka_controllers</depend>
 

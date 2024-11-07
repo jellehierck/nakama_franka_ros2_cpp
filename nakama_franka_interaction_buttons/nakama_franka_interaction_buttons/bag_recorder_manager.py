@@ -4,6 +4,7 @@ import rclpy
 from builtin_interfaces.msg import Duration
 from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_system_default
 from rclpy.task import Future
 
 from controller_manager_msgs.srv import LoadController, SwitchController, UnloadController
@@ -55,13 +56,14 @@ class BagRecorderManager(Node):
         self._state = BagRecorderManagerState.IDLE
 
         # Declare parameters
-        self.recorder_controller_param = self.declare_parameter(
-            name="recorder_controller",
-            value="nakama_bag_recorder_controller",
-            descriptor=ParameterDescriptor(
-                description="Name of the recorder controller to be loaded into the controller manager",
-            ),
-        )
+        # TODO: Add parameter for playback controller name
+        # self.recorder_controller_param = self.declare_parameter(
+        #     name="recorder_controller",
+        #     value="nakama_bag_recorder_controller",
+        #     descriptor=ParameterDescriptor(
+        #         description="Name of the recorder controller to be loaded into the controller manager",
+        #     ),
+        # )
 
         self.wait_for_services_param = self.declare_parameter(
             name="wait_for_services",
@@ -93,26 +95,24 @@ class BagRecorderManager(Node):
 
         # Bag recorder services
         self.start_recording_service = AsyncClientWrapper(
-            self.create_client(StartBagRecording, srv_name="start_recording")
+            self.create_client(StartBagRecording, srv_name="/joint_state_bag_recorder/start_recording")
         )
         wait_for_service(self.start_recording_service)
 
         self.stop_recording_service = AsyncClientWrapper(
-            self.create_client(StartBagRecording, srv_name="stop_recording")
+            self.create_client(StopBagRecording, srv_name="/joint_state_bag_recorder/stop_recording")
         )
         wait_for_service(self.stop_recording_service)
 
         # Button color services
         self.set_button_color_service = AsyncClientWrapper(
-            self.create_client(BeeButtonSetColor, srv_name="set_button_color")
+            self.create_client(BeeButtonSetColor, srv_name="/bee_buttons/set_button_color")
         )
         wait_for_service(self.set_button_color_service)
 
         # Create subscriptions
         self.button_press_subscription = self.create_subscription(
-            BeeButtonPress,
-            "button_press",
-            self.handle_button_press,
+            BeeButtonPress, "button_press", self.handle_button_press, qos_profile=qos_profile_system_default
         )
 
     @property
@@ -229,54 +229,32 @@ class BagRecorderManager(Node):
     def start_training(self) -> None:
         """Enter the `STARTING_TRAINING` transition state."""
         self.state = BagRecorderManagerState.STARTING_TRAINING
-        request = LoadController.Request(name=self.recorder_controller_param.get_parameter_value().string_value)
-        self.load_controller_service.call_async(request, done_callback=self.start_training_finished)
 
-    def start_training_finished(self, resolved_future: Future) -> None:
+        # We do not need to perfom any actions and can immediately finish the transition state
+        self.start_training_finished()
+
+    def start_training_finished(self) -> None:
         """End of the `STARTING_TRAINING` transition phase.
 
         Possible next states:
-        - `LoadController` response indicated success: `TRAINING_IDLE`
-        - `LoadController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to load the recorder controller.
+        - Always transitions to `TRAINING_IDLE`
         """
-        response: LoadController.Response | None = resolved_future.result()
-
-        if response is None or not response.ok:
-            self.get_logger().error(
-                f"Could not load {self.recorder_controller_param.get_parameter_value().string_value}"
-            )
-            self.state = BagRecorderManagerState.ERROR
-
-        else:
-            self.state = BagRecorderManagerState.TRAINING_IDLE
+        self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def stop_training(self) -> None:
         """Enter the `STOPPING_TRAINING` transition state."""
         self.state = BagRecorderManagerState.STOPPING_TRAINING
-        request = UnloadController.Request(self.recorder_controller_param.get_parameter_value().string_value)
-        self.unload_controller_service.call_async(request, done_callback=self.stop_training_finished)
 
-    def stop_training_finished(self, resolved_future: Future) -> None:
+        # We do not need to perfom any actions and can immediately finish the transition state
+        self.stop_training_finished()
+
+    def stop_training_finished(self) -> None:
         """End of the `STOPPING_TRAINING` transition phase.
 
         Possible next states:
-        - `UnloadController` response indicated success: `IDLE`
-        - `UnloadController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to unload the recorder controller.
+        - Always transitions to `IDLE`
         """
-        response: UnloadController.Response | None = resolved_future.result()
-
-        if response is None or not response.ok:
-            self.get_logger().error(
-                f"Could not unload {self.recorder_controller_param.get_parameter_value().string_value}"
-            )
-            self.state = BagRecorderManagerState.ERROR
-
-        else:
-            self.state = BagRecorderManagerState.IDLE
+        self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state."""
@@ -345,7 +323,7 @@ def main(args: list[str] | None = None) -> None:
         pass
 
     finally:
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":
