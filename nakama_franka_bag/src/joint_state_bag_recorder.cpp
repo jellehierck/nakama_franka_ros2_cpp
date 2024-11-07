@@ -29,7 +29,7 @@
 #include <nakama_franka_interfaces/srv/start_bag_recording.hpp>
 #include <nakama_franka_interfaces/srv/stop_bag_recording.hpp>
 
-nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("franka_state_bag_recorder") {
+nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("joint_state_bag_recorder") {
   // Declare parameters
   auto record_topic_param_descriptor = rcl_interfaces::msg::ParameterDescriptor();
   record_topic_param_descriptor.description = "Topic name to record the joint states to in the bag.";
@@ -49,7 +49,7 @@ nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("franka_state_
   // Subscriptions to topics which are recorded
   // TODO: Add more subscriptions for more franka state data? If needed.
   joint_states_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-    "/franka/joint_state", rclcpp::SystemDefaultsQoS(),
+    "/franka/joint_states", rclcpp::SystemDefaultsQoS(),
     std::bind(&nakama_bag::JointStateBagRecorder::record_joint_state_msg_to_bag, this, std::placeholders::_1)
   );
 
