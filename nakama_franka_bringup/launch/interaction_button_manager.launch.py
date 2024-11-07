@@ -84,6 +84,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 arguments=[
                     "nakama_bag_playback_joint_impedance_controller",
                     "--load-only",  # Important: load the controller but do not configure
+                    # "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [
@@ -102,6 +103,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 arguments=[
                     "nakama_bag_recorder_controller",
                     "--load-only",  # Important: load the controller but do not configure
+                    # "--inactive",  # Important: load the controller but do not configure
                     "--param-file",
                     PathJoinSubstitution(
                         [
@@ -127,7 +129,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="bag_recorder_manager",
                 parameters=[
                     {"recorder_controller": "nakama_bag_recorder_controller"},
-                    {"wait_for_services": True},
+                    {"wait_for_services": False},
                 ],
             ),
         ]
