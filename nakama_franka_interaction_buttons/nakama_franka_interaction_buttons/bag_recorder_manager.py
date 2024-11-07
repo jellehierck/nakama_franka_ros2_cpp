@@ -55,6 +55,12 @@ class BagRecorderManager(Node):
         # Initialize the state
         self._state = BagRecorderManagerState.IDLE
 
+        # Store the recorded bag URIs during the training phase
+        self.recorded_bag_uris: list[str] = []
+
+        # Keep track of how many recordings were played back
+        self.nr_recordings_played_back = 0
+
         # Declare parameters
         # TODO: Add parameter for playback controller name
         # self.recorder_controller_param = self.declare_parameter(
@@ -260,8 +266,9 @@ class BagRecorderManager(Node):
         """Enter the `STARTING_RECORDING` transition state."""
         self.state = BagRecorderManagerState.STARTING_RECORDING
         request = StartBagRecording.Request(
+            # TODO: Create better bag path and name, perhaps based on participant etc
             bag_path="recordings/",
-            bag_name="recording",  # TODO: Create better bag name, perhaps based on participant etc
+            bag_name=f"recording_{len(self.recorded_bag_uris):03}",
             append_timestamp=False,
         )
         self.start_recording_service.call_async(request, done_callback=self.start_recording_finished)
@@ -282,8 +289,8 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.ERROR
 
         else:
-            # TODO: Store opened bag URI
-            todo = response.opened_bag_uri
+            # Store the recorded bag URI in the list of trainings
+            self.recorded_bag_uris.append(response.opened_bag_uri)
             self.state = BagRecorderManagerState.RECORDING
 
     def stop_recording(self) -> None:
