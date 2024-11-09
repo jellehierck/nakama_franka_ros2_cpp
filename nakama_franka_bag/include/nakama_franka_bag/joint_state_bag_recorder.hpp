@@ -4,9 +4,8 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
-#include <mutex>
-#include <string>
 
+#include <rclcpp/callback_group.hpp>
 #include <rclcpp/duration.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
@@ -45,6 +44,10 @@ class JointStateBagRecorder : public rclcpp::Node {
 
   /**
    * Callback on receiving a joint state message, which will record it to the bag.
+   *
+   * @note This method should never run in parallel with other methods which access the writer, e.g. using callback
+   * groups.
+   *
    * @param msg Received message.
    */
   void record_joint_state_msg_to_bag(sensor_msgs::msg::JointState::ConstSharedPtr msg);
@@ -52,6 +55,10 @@ class JointStateBagRecorder : public rclcpp::Node {
  private:
   /**
    * Service callback when the start recording service is called.
+   *
+   * @note This method should never run in parallel with other methods which access the writer, e.g. using callback
+   * groups.
+   *
    * @param request Request information.
    * @param response Response.
    */
@@ -62,6 +69,10 @@ class JointStateBagRecorder : public rclcpp::Node {
 
   /**
    * Service callback when the stop recording service is called.
+   *
+   * @note This method should never run in parallel with other methods which access the writer, e.g. using callback
+   * groups.
+   *
    * @param request Empty.
    * @param response Empty.
    */
@@ -72,11 +83,11 @@ class JointStateBagRecorder : public rclcpp::Node {
 
   std::unique_ptr<rosbag2_cpp::Writer> bag_writer_;
 
+  rclcpp::CallbackGroup ::SharedPtr                                            recording_cb_group_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr                joint_states_sub_;
   rclcpp::Service<nakama_franka_interfaces::srv::StartBagRecording>::SharedPtr start_recording_srv_;
   rclcpp::Service<nakama_franka_interfaces::srv::StopBagRecording>::SharedPtr  stop_recording_srv_;
 
-  std::mutex       writer_mutex_;
   std::atomic_bool recording_started_{false};
 };
 

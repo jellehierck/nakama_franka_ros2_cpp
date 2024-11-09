@@ -6,15 +6,16 @@
 #include <functional>
 #include <iomanip>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 
+#include <rclcpp/callback_group.hpp>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/node.hpp>
 #include <rclcpp/qos.hpp>
+#include <rclcpp/subscription_options.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/service.hpp>
 #include <rclcpp/subscription.hpp>
@@ -30,6 +31,9 @@
 #include <nakama_franka_interfaces/srv/stop_bag_recording.hpp>
 
 nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("joint_state_bag_recorder") {
+  // Define callback group
+  recording_cb_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+
   // Declare parameters
   auto record_topic_param_descriptor = rcl_interfaces::msg::ParameterDescriptor();
   record_topic_param_descriptor.description = "Topic name to record the joint states to in the bag.";
@@ -38,19 +42,28 @@ nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("joint_state_b
   // Register the services
   start_recording_srv_ = this->create_service<nakama_franka_interfaces::srv::StartBagRecording>(
     START_RECORDING_SERVICE_NAME,
-    std::bind(&JointStateBagRecorder::start_recording, this, std::placeholders::_1, std::placeholders::_2)
+    std::bind(&JointStateBagRecorder::start_recording, this, std::placeholders::_1, std::placeholders::_2),
+    rclcpp::ServicesQoS().get_rmw_qos_profile(),
+    recording_cb_group_  // Assign to the recording callback group to prevent callbacks from running in parallel
   );
 
   stop_recording_srv_ = this->create_service<nakama_franka_interfaces::srv::StopBagRecording>(
     STOP_RECORDING_SERVICE_NAME,
-    std::bind(&JointStateBagRecorder::stop_recording, this, std::placeholders::_1, std::placeholders::_2)
+    std::bind(&JointStateBagRecorder::stop_recording, this, std::placeholders::_1, std::placeholders::_2),
+    rclcpp::ServicesQoS().get_rmw_qos_profile(),
+    recording_cb_group_  // Assign to the recording callback group to prevent callbacks from running in parallel
   );
 
   // Subscriptions to topics which are recorded
+  // Create subscription options which define the callback group to use, to prevent callbacks from running in parallel
+  auto sub_options_with_recording_cb_group = rclcpp::SubscriptionOptions();
+  sub_options_with_recording_cb_group.callback_group = recording_cb_group_;
+
   // TODO: Add more subscriptions for more franka state data? If needed.
   joint_states_sub_ = create_subscription<sensor_msgs::msg::JointState>(
     "/franka/joint_states", rclcpp::SystemDefaultsQoS(),
-    std::bind(&nakama_bag::JointStateBagRecorder::record_joint_state_msg_to_bag, this, std::placeholders::_1)
+    std::bind(&nakama_bag::JointStateBagRecorder::record_joint_state_msg_to_bag, this, std::placeholders::_1),
+    sub_options_with_recording_cb_group
   );
 
   // Initialize the writer
@@ -59,9 +72,6 @@ nakama_bag::JointStateBagRecorder::JointStateBagRecorder() : Node("joint_state_b
 
 void nakama_bag::JointStateBagRecorder::record_joint_state_msg_to_bag(sensor_msgs::msg::JointState::ConstSharedPtr msg
 ) {
-  // Acquire the mutex to prevent access to the writer during the execution of this function
-  std::scoped_lock lock(this->writer_mutex_);
-
   // If the writer is not open yet, do nothing
   if (!recording_started_.load(std::memory_order_relaxed)) {
     return;
@@ -75,9 +85,6 @@ void nakama_bag::JointStateBagRecorder::start_recording(
   nakama_franka_interfaces::srv::StartBagRecording::Request::ConstSharedPtr request,
   nakama_franka_interfaces::srv::StartBagRecording::Response::SharedPtr     response
 ) {
-  // Acquire the mutex to prevent access to the writer during the execution of this function
-  std::scoped_lock lock(this->writer_mutex_);
-
   // Check if the writer is already open: if so, we cannot open it again
   if (recording_started_.load(std::memory_order_relaxed)) {
     response->started = false;
@@ -119,9 +126,6 @@ void nakama_bag::JointStateBagRecorder::stop_recording(
   nakama_franka_interfaces::srv::StopBagRecording::Request::ConstSharedPtr /*request*/,
   nakama_franka_interfaces::srv::StopBagRecording::Response::SharedPtr /*response*/
 ) {
-  // Acquire the mutex to prevent access to the writer during the execution of this function
-  std::scoped_lock lock(this->writer_mutex_);
-
   // Check if the writer is already open: if so, we cannot open it again
   if (!recording_started_.load(std::memory_order_relaxed)) {
     RCLCPP_WARN(this->get_logger(), "Could not stop recording, it is not started!");
