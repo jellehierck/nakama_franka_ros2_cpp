@@ -101,7 +101,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="spawner",
                 arguments=[
                     "franka_gravity_compensation_example_controller",
-                    "--load-only",  # Important: load the controller but do not configure
+                    "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [
@@ -119,7 +119,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="spawner",
                 arguments=[
                     "franka_move_to_start_example_controller",
-                    "--load-only",  # Important: load the controller but do not configure
+                    "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [

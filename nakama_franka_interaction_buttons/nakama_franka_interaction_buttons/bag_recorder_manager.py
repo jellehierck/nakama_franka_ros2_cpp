@@ -7,7 +7,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 from rclpy.task import Future
 
-from controller_manager_msgs.srv import LoadController, SwitchController, UnloadController
+from controller_manager_msgs.srv import SwitchController
 
 from bee_buttons_interfaces.msg import BeeButtonColor, BeeButtonPress
 from bee_buttons_interfaces.srv import BeeButtonSetColor
@@ -89,15 +89,10 @@ class BagRecorderManager(Node):
                     self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
 
         # Controller manager services
-        self.load_controller_service = AsyncClientWrapper(
-            self.create_client(LoadController, srv_name="controller_manager/load_controller")
+        self.switch_controller_service = AsyncClientWrapper(
+            self.create_client(SwitchController, srv_name="controller_manager/switch_controller")
         )
-        wait_for_service(self.load_controller_service)
-
-        self.unload_controller_service = AsyncClientWrapper(
-            self.create_client(UnloadController, srv_name="controller_manager/unload_controller")
-        )
-        wait_for_service(self.unload_controller_service)
+        wait_for_service(self.switch_controller_service)
 
         # Bag recorder services
         self.start_recording_service = AsyncClientWrapper(
@@ -235,32 +230,64 @@ class BagRecorderManager(Node):
     def start_training(self) -> None:
         """Enter the `STARTING_TRAINING` transition state."""
         self.state = BagRecorderManagerState.STARTING_TRAINING
+        request = SwitchController.Request(
+            # TODO: Make controller name configurable
+            activate_controllers=["franka_gravity_compensation_example_controller"],
+            deactivate_controllers=[],
+            strictness=SwitchController.Request.STRICT,
+            activate_asap=True,
+            timeout=Duration(sec=1),
+        )
+        self.switch_controller_service.call_async(request, done_callback=self.start_training_finished)
 
-        # We do not need to perfom any actions and can immediately finish the transition state
-        self.start_training_finished()
-
-    def start_training_finished(self) -> None:
+    def start_training_finished(self, resolved_future: Future) -> None:
         """End of the `STARTING_TRAINING` transition phase.
 
         Possible next states:
-        - Always transitions to `TRAINING_IDLE`
+        - `SwitchController` response indicated success: `TRAINING_IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
         """
-        self.state = BagRecorderManagerState.TRAINING_IDLE
+        response: SwitchController.Response | None = resolved_future.result()
+
+        if response is None or not response.ok:
+            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
+            self.state = BagRecorderManagerState.ERROR
+
+        else:
+            self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def stop_training(self) -> None:
         """Enter the `STOPPING_TRAINING` transition state."""
         self.state = BagRecorderManagerState.STOPPING_TRAINING
+        request = SwitchController.Request(
+            # TODO: Make controller name configurable
+            activate_controllers=[],
+            deactivate_controllers=["franka_gravity_compensation_example_controller"],
+            strictness=SwitchController.Request.STRICT,
+            activate_asap=True,
+            timeout=Duration(sec=1),
+        )
+        self.switch_controller_service.call_async(request, done_callback=self.stop_training_finished)
 
-        # We do not need to perfom any actions and can immediately finish the transition state
-        self.stop_training_finished()
-
-    def stop_training_finished(self) -> None:
+    def stop_training_finished(self, resolved_future: Future) -> None:
         """End of the `STOPPING_TRAINING` transition phase.
 
         Possible next states:
-        - Always transitions to `IDLE`
+        - `SwitchController` response indicated success: `IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
         """
-        self.state = BagRecorderManagerState.IDLE
+        response: SwitchController.Response | None = resolved_future.result()
+
+        if response is None or not response.ok:
+            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
+            self.state = BagRecorderManagerState.ERROR
+
+        else:
+            self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state."""
