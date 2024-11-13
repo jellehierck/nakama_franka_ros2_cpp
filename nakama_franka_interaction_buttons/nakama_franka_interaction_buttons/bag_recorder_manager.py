@@ -136,7 +136,7 @@ class BagRecorderManager(Node):
         """Send a button color effect request based on a state."""
         if state == BagRecorderManagerState.ERROR:
             self.set_button_color_service.call_async(
-                set_color_request=BeeButtonSetColor.Request(
+                request=BeeButtonSetColor.Request(
                     broadcast=True,
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
@@ -148,7 +148,7 @@ class BagRecorderManager(Node):
 
         elif state == BagRecorderManagerState.IDLE:
             self.set_button_color_service.call_async(
-                set_color_request=BeeButtonSetColor.Request(
+                request=BeeButtonSetColor.Request(
                     broadcast=True,
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
@@ -160,7 +160,7 @@ class BagRecorderManager(Node):
 
         elif state == BagRecorderManagerState.TRAINING_IDLE:
             self.set_button_color_service.call_async(
-                set_color_request=BeeButtonSetColor.Request(
+                request=BeeButtonSetColor.Request(
                     broadcast=True,
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
@@ -172,7 +172,7 @@ class BagRecorderManager(Node):
 
         elif state == BagRecorderManagerState.RECORDING:
             self.set_button_color_service.call_async(
-                set_color_request=BeeButtonSetColor.Request(
+                request=BeeButtonSetColor.Request(
                     broadcast=True,
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
@@ -185,7 +185,7 @@ class BagRecorderManager(Node):
         elif str(state).startswith("starting") or str(state).startswith("stopping"):
             # All transition states will show the same color effect
             self.set_button_color_service.call_async(
-                set_color_request=BeeButtonSetColor.Request(
+                request=BeeButtonSetColor.Request(
                     broadcast=True,
                     node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_BLINK,
