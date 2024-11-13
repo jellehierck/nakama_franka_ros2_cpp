@@ -1,13 +1,14 @@
 from enum import auto
 
 import rclpy
+from builtin_interfaces.msg import Duration
+from rcl_interfaces.msg import Parameter, ParameterDescriptor, ParameterType, ParameterValue
+from rcl_interfaces.srv import SetParameters
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 from rclpy.task import Future
-
-from builtin_interfaces.msg import Duration
-from rcl_interfaces.msg import ParameterDescriptor, Parameter, ParameterType, ParameterValue, SetParametersResult
-from rcl_interfaces.srv import SetParameters
 
 from controller_manager_msgs.srv import SwitchController
 
@@ -86,6 +87,10 @@ class BagRecorderManager(Node):
             ),
         )
 
+        # Instantiate another callback group which will be run on a separate executor, to allow service calls to happen
+        # on anothe thread and therefore be synchronous without causing a deadlock
+        self.async_service_callback_group = MutuallyExclusiveCallbackGroup()
+
         # Create service clients to be able to make service requests
         def wait_for_service(client_wrapper: AsyncClientWrapper) -> None:
             """Helper function to wait on the service to become availabe if `wait_for_services` parameter is True."""
@@ -98,31 +103,49 @@ class BagRecorderManager(Node):
         # TODO: Update this to use a synchronous call instead? Or remove the hardcoded controller name
         self.set_parameters_service = AsyncClientWrapper(
             self.create_client(
-                SetParameters, srv_name="/nakama_bag_playback_joint_impedance_controller/set_parameters"
+                SetParameters,
+                srv_name="/nakama_bag_playback_joint_impedance_controller/set_parameters",
+                callback_group=self.async_service_callback_group,
             )
         )
         # We do not wait for the set_parameters_service
 
         # Controller manager services
         self.switch_controller_service = AsyncClientWrapper(
-            self.create_client(SwitchController, srv_name="/controller_manager/switch_controller")
+            self.create_client(
+                SwitchController,
+                srv_name="/controller_manager/switch_controller",
+                callback_group=self.async_service_callback_group,
+            )
         )
         wait_for_service(self.switch_controller_service)
 
         # Bag recorder services
         self.start_recording_service = AsyncClientWrapper(
-            self.create_client(StartBagRecording, srv_name="/joint_state_bag_recorder/start_recording")
+            self.create_client(
+                StartBagRecording,
+                srv_name="/joint_state_bag_recorder/start_recording",
+                callback_group=self.async_service_callback_group,
+            )
         )
         wait_for_service(self.start_recording_service)
 
         self.stop_recording_service = AsyncClientWrapper(
-            self.create_client(StopBagRecording, srv_name="/joint_state_bag_recorder/stop_recording")
+            self.create_client(
+                StopBagRecording,
+                srv_name="/joint_state_bag_recorder/stop_recording",
+                callback_group=self.async_service_callback_group,
+            )
         )
         wait_for_service(self.stop_recording_service)
 
         # Button color services
         self.set_button_color_service = AsyncClientWrapper(
-            self.create_client(BeeButtonSetColor, srv_name="/bee_buttons/set_button_color")
+            self.create_client(
+                BeeButtonSetColor,
+                srv_name="/bee_buttons/set_button_color",
+                callback_group=self.async_service_callback_group,
+            )
         )
         wait_for_service(self.set_button_color_service)
 
@@ -220,7 +243,7 @@ class BagRecorderManager(Node):
         #     return
 
         # Define which specific button press types are handled in specific states
-        if self.state == BagRecorderManagerState.IDLE:  # noqa: SIM102
+        if self.state == BagRecorderManagerState.IDLE:
             if msg.press_type == BeeButtonPress.LONG_PRESS:
                 self.start_training()
                 return
@@ -263,7 +286,12 @@ class BagRecorderManager(Node):
         self.get_logger().warn(f"Button press type {msg.press_type} has no effect in state {self._state}")
 
     def start_training(self) -> None:
-        """Enter the `STARTING_TRAINING` transition state."""
+        """Enter the `STARTING_TRAINING` transition state.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `TRAINING_IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+        """
         self.state = BagRecorderManagerState.STARTING_TRAINING
         request = SwitchController.Request(
             # TODO: Make controller name configurable
@@ -273,18 +301,8 @@ class BagRecorderManager(Node):
             activate_asap=True,
             timeout=Duration(sec=1),
         )
-        self.switch_controller_service.call_async(request, done_callback=self.start_training_finished)
 
-    def start_training_finished(self, resolved_future: Future) -> None:
-        """End of the `STARTING_TRAINING` transition phase.
-
-        Possible next states:
-        - `SwitchController` response indicated success: `TRAINING_IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
-        """
-        response: SwitchController.Response | None = resolved_future.result()
+        response = self.switch_controller_service.call_sync_and_await(request)
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
@@ -294,7 +312,12 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def stop_training(self) -> None:
-        """Enter the `STOPPING_TRAINING` transition state."""
+        """Enter the `STOPPING_TRAINING` transition state.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+        """
         self.state = BagRecorderManagerState.STOPPING_TRAINING
         request = SwitchController.Request(
             # TODO: Make controller name configurable
@@ -304,18 +327,8 @@ class BagRecorderManager(Node):
             activate_asap=True,
             timeout=Duration(sec=1),
         )
-        self.switch_controller_service.call_async(request, done_callback=self.stop_training_finished)
 
-    def stop_training_finished(self, resolved_future: Future) -> None:
-        """End of the `STOPPING_TRAINING` transition phase.
-
-        Possible next states:
-        - `SwitchController` response indicated success: `IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
-        """
-        response: SwitchController.Response | None = resolved_future.result()
+        response: SwitchController.Response | None = self.switch_controller_service.call_sync_and_await(request)
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
@@ -325,7 +338,12 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
-        """Enter the `STARTING_RECORDING` transition state."""
+        """Enter the `STARTING_RECORDING` transition state.
+
+        Possible next states:
+        - `StartBagRecording` response indicated success: `RECORDING`
+        - `StartBagRecording` response indicated failure: `ERROR`
+        """
         self.state = BagRecorderManagerState.STARTING_RECORDING
         request = StartBagRecording.Request(
             # TODO: Create better bag path and name, perhaps based on participant etc
@@ -333,18 +351,8 @@ class BagRecorderManager(Node):
             bag_name=f"recording_{len(self.recorded_bag_uris):03}",
             append_timestamp=False,
         )
-        self.start_recording_service.call_async(request, done_callback=self.start_recording_finished)
 
-    def start_recording_finished(self, resolved_future: Future) -> None:
-        """End of the `STARTING_RECORDING` transition phase.
-
-        Possible next states:
-        - `StartBagRecording` response indicated success: `RECORDING`
-        - `StartBagRecording` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
-        """
-        response: StartBagRecording.Response | None = resolved_future.result()
+        response: StartBagRecording.Response | None = self.start_recording_service.call_sync_and_await(request)
 
         if response is None or not response.started:
             self.get_logger().error("Could not start recording")
@@ -356,21 +364,16 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.RECORDING
 
     def stop_recording(self) -> None:
-        """Enter the `STOPPING_RECORDING` transition state."""
-        self.state = BagRecorderManagerState.STOPPING_RECORDING
-        request = StopBagRecording.Request()
-        self.stop_recording_service.call_async(request, done_callback=self.stop_recording_finished)
-
-    def stop_recording_finished(self, resolved_future: Future) -> None:
-        """End of the `STOPPING_RECORDING` transition phase.
+        """Enter the `STOPPING_RECORDING` transition state.
 
         Possible next states:
         - `StopBagRecording` response indicated success: `TRAINING_IDLE`
         - `StopBagRecording` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
         """
-        response: StopBagRecording.Response | None = resolved_future.result()
+        self.state = BagRecorderManagerState.STOPPING_RECORDING
+        request = StopBagRecording.Request()
+
+        response: StopBagRecording.Response | None = self.stop_recording_service.call_sync_and_await(request)
 
         if response is None:
             self.get_logger().error("Could not stop recording")
@@ -380,66 +383,66 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def start_operating(self) -> None:
-        """Enter the `STARTING_OPERATING` transition state."""
-        self.state = BagRecorderManagerState.STARTING_OPERATING
-        # Transition to the operating state immediately
-        self.start_operating_finished()
-
-    def start_operating_finished(self) -> None:
-        """End of the `STARTING_OPERATING` transition phase.
+        """Enter the `STARTING_OPERATING` transition state.
 
         Possible next states:
         - Always transitions to: `OPERATING_IDLE`
         """
+        self.state = BagRecorderManagerState.STARTING_OPERATING
+        # Transition to the next state immediately
         self.state = BagRecorderManagerState.OPERATING_IDLE
 
     def stop_operating(self) -> None:
-        """Enter the `STOPPING_OPERATING` transition state."""
-        self.state = BagRecorderManagerState.STOPPING_OPERATING
-        # Transition to the operating state immediately
-        self.stop_operating_finished
-
-    def stop_operating_finished(self) -> None:
-        """End of the `STOPPING_OPERATING` transition phase.
+        """Enter the `STOPPING_OPERATING` transition state.
 
         Possible next states:
         - Always transitions to: `IDLE`
         """
+        self.state = BagRecorderManagerState.STOPPING_OPERATING
+        # Transition to the next state immediately
         self.state = BagRecorderManagerState.IDLE
 
     def start_replaying(self) -> None:
-        """Enter the `STARTING_REPLAYING` transition state."""
+        """Enter the `STARTING_REPLAYING` transition state.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `REPLAYING`
+        - `SwitchController` response indicated failure, or the bag URI was not set on the playback controller: `ERROR`
+        """
         self.state = BagRecorderManagerState.STARTING_REPLAYING
 
         # Check if we can play back the next recording
+        # TODO: Make a better way to influence which recording is selected
         if self.nr_recordings_played_back >= len(self.recorded_bag_uris):
             self.get_logger().error("There is no new recording to play back!")
             self.state = BagRecorderManagerState.ERROR
             return
 
+        # Create a service request to change the used bag URI for the playback controller before the controller starts
         bag_uri_parameter_request = SetParameters.Request(
             parameters=[
                 Parameter(
                     name="bag_uri",
                     value=ParameterValue(
                         type=ParameterType.PARAMETER_STRING,
+                        # TODO: Make a better way to influence which recording is selected
                         string_value=self.recorded_bag_uris[self.nr_recordings_played_back],
                     ),
                 )
             ]
         )
-        bag_uri_parameter_future = self.set_parameters_service.call_async(bag_uri_parameter_request)
-        # TODO: This currently deadlocks. add a separate executor for service callbacks
-        rclpy.spin_until_future_complete(self, bag_uri_parameter_future)
-        resolved_bag_uri_parameter_future: SetParameters.Response | None = bag_uri_parameter_future.result()  # type: ignore
-        if resolved_bag_uri_parameter_future is None or any(
-            not result.successful for result in resolved_bag_uri_parameter_future.results
-        ):
-            reasons: list[str] = [result.reason for result in resolved_bag_uri_parameter_future.results]  # type: ignore
-            self.get_logger().error(f"Could not update the bag URI parameter. Reason: {reasons}")
+
+        bag_uri_response: SetParameters.Response | None = self.set_parameters_service.call_sync_and_await(
+            bag_uri_parameter_request
+        )
+
+        # Check that the new bag URI is set successfully
+        if bag_uri_response is None or not all(result.successful for result in bag_uri_response.results):
+            self.get_logger().error("Could not update the bag URI parameter.")
             self.state = BagRecorderManagerState.ERROR
             return
 
+        # Now we can activate the playback controller
         request = SwitchController.Request(
             # TODO: Make controller name configurable
             activate_controllers=["nakama_bag_playback_joint_impedance_controller"],
@@ -448,18 +451,7 @@ class BagRecorderManager(Node):
             activate_asap=True,
             timeout=Duration(sec=1),
         )
-        self.switch_controller_service.call_async(request, done_callback=self.start_replaying_finished)
-
-    def start_replaying_finished(self, resolved_future: Future) -> None:
-        """End of the `STARTING_REPLAYING` transition phase.
-
-        Possible next states:
-        - `SwitchController` response indicated success: `REPLAYING`
-        - `SwitchController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
-        """
-        response: SwitchController.Response | None = resolved_future.result()
+        response: SwitchController.Response | None = self.switch_controller_service.call_sync_and_await(request)
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.REPLAYING}")
@@ -469,7 +461,12 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.REPLAYING
 
     def stop_replaying(self) -> None:
-        """Enter the `STOPPING_REPLAYING` transition state."""
+        """Enter the `STOPPING_REPLAYING` transition state.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `OPERATING_IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+        """
         self.state = BagRecorderManagerState.STOPPING_REPLAYING
 
         self.nr_recordings_played_back += 1  # Update the number of recordings which are played back
@@ -482,18 +479,7 @@ class BagRecorderManager(Node):
             activate_asap=True,
             timeout=Duration(sec=1),
         )
-        self.switch_controller_service.call_async(request, done_callback=self.stop_replaying_finished)
-
-    def stop_replaying_finished(self, resolved_future: Future) -> None:
-        """End of the `STOPPING_REPLAYING` transition phase.
-
-        Possible next states:
-        - `SwitchController` response indicated success: `OPERATING_IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
-
-        :param resolved_future: Resolved future of the service request to start recording.
-        """
-        response: SwitchController.Response | None = resolved_future.result()
+        response: SwitchController.Response | None = self.switch_controller_service.call_sync_and_await(request)
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.OPERATING_IDLE}")
@@ -508,7 +494,16 @@ def main(args: list[str] | None = None) -> None:
     try:
         rclpy.init(args=args)
         bag_recorder_manager_node = BagRecorderManager()
-        rclpy.spin(bag_recorder_manager_node)
+
+        # Define a multithreaded executor to perform some callbacks in parallel.
+        # In particular, we want to execute service calls parallel to all other callbacks.
+        # We use the principle that any service call should be parallel to all other callbacks, but never to itself.
+        # The other callbacks should also not be parallel to each other.
+        # To achieve this, we add service calls to one mutually exclusive callback group and all other callbacks to
+        # another mutually exclusive callback group.
+        mt_executor = MultiThreadedExecutor(num_threads=2)
+
+        rclpy.spin(bag_recorder_manager_node, executor=mt_executor)
 
     except KeyboardInterrupt:
         # Keyboard interrupts cause the program to stop gracefully
