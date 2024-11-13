@@ -24,6 +24,7 @@
   <exec_depend>franka_description</exec_depend>
   <exec_depend>franka_hardware</exec_depend>
   <exec_depend>franka_robot_state_broadcaster</exec_depend>
+  <exec_depend>franka_example_controllers</exec_depend>
 
   <!-- First-party ROS dependencies -->
   <exec_depend>bee_buttons</exec_depend>

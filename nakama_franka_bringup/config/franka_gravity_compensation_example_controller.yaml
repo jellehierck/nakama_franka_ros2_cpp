@@ -1,0 +1,4 @@
+franka_gravity_compensation_example_controller:
+  ros__parameters:
+    # Controller type
+    type: franka_example_controllers/GravityCompensationExampleController

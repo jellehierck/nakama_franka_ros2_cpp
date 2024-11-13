@@ -51,7 +51,7 @@ def generate_launch_description():  # noqa: ANN201, D103
             ),
             DeclareLaunchArgument(
                 load_gripper_parameter_name,
-                default_value="true",
+                default_value="false",
                 description="Use Franka Gripper as an end-effector, otherwise, the robot is loaded "
                 "without an end-effector.",
             ),
@@ -84,13 +84,48 @@ def generate_launch_description():  # noqa: ANN201, D103
                 arguments=[
                     "nakama_bag_playback_joint_impedance_controller",
                     "--load-only",  # Important: load the controller but do not configure
-                    # "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [
                             FindPackageShare("nakama_franka_controllers"),
                             "config",
                             "nakama_bag_playback_joint_impedance_controller.yaml",
+                        ]
+                    ),
+                ],
+                output="screen",
+            ),
+            # Load the Franka gravity compensation example controller (for compliant robot in training phase)
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=[
+                    "franka_gravity_compensation_example_controller",
+                    "--load-only",  # Important: load the controller but do not configure
+                    "--param-file",
+                    PathJoinSubstitution(
+                        [
+                            FindPackageShare("nakama_franka_bringup"),
+                            "config",
+                            "franka_gravity_compensation_example_controller.yaml",
+                        ]
+                    ),
+                ],
+                output="screen",
+            ),
+            # Load the Franka move to start example controller (for homing to hardcoded start position)
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=[
+                    "franka_move_to_start_example_controller",
+                    "--load-only",  # Important: load the controller but do not configure
+                    "--param-file",
+                    PathJoinSubstitution(
+                        [
+                            FindPackageShare("nakama_franka_bringup"),
+                            "config",
+                            "franka_move_to_start_example_controller.yaml",
                         ]
                     ),
                 ],

@@ -1,0 +1,22 @@
+franka_move_to_start_example_controller:
+  ros__parameters:
+    # Controller type
+    type: franka_example_controllers/MoveToStartExampleController
+
+    # Controller-specific parameters
+    k_gains:
+      - 600.0
+      - 600.0
+      - 600.0
+      - 600.0
+      - 250.0
+      - 150.0
+      - 50.0
+    d_gains:
+      - 30.0
+      - 30.0
+      - 30.0
+      - 30.0
+      - 10.0
+      - 10.0
+      - 5.0
