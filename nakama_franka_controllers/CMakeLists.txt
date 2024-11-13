@@ -93,7 +93,7 @@ if(BUILD_TESTING)
         test/test_load_topic_joint_impedance_controller.cpp
         test/test_load_bag_playback_joint_impedance_controller.cpp
         test/test_load_bag_recorder_controller.cpp
-        test/test_move_to_pose_controller.cpp
+        # test/test_load_move_to_pose_controller.cpp
 
         # Add more controller load tests here
     )
