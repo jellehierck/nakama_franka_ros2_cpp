@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <Eigen/Eigen>
@@ -18,10 +19,8 @@
 
 #include <controller_interface/controller_interface.hpp>
 #include <controller_interface/controller_interface_base.hpp>
-#include <realtime_tools/realtime_tools/realtime_buffer.h>
 
 #include <rosbag2_cpp/reader.hpp>
-#include <rosbag2_storage/storage_options.hpp>
 
 #include <franka_msgs/msg/franka_robot_state.hpp>
 
@@ -101,7 +100,6 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
 
   // Tools required to read and (de)serialize messages from a bag
   std::string                             bag_joint_state_topic_;
-  rosbag2_storage::StorageOptions         bag_storage_options_;
   std::unique_ptr<rosbag2_cpp::Reader>    bag_reader_;
   rclcpp::Serialization<RecordedTopicMsg> recorded_topic_msg_serialization_;
 

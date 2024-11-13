@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <exception>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -25,7 +24,7 @@
 
 #include <rosbag2_storage/storage_options.hpp>
 #include <rosbag2_storage/serialized_bag_message.hpp>
-#include <rosbag2_transport/reader_writer_factory.hpp>
+#include <rosbag2_cpp/reader.hpp>
 #include <rosbag2_storage/topic_metadata.hpp>
 
 controller_interface::InterfaceConfiguration
@@ -103,10 +102,8 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
     k_gains_(static_cast<int>(i)) = k_gains_param.at(i);
   }
 
-  // Get the bag uri parameter and create bag reader object
-  bag_storage_options_ = rosbag2_storage::StorageOptions();
-  bag_storage_options_.uri = get_node()->get_parameter("bag_uri").as_string();
-  bag_reader_ = rosbag2_transport::ReaderWriterFactory::make_reader(bag_storage_options_);
+  // Create bag reader object
+  bag_reader_ = std::make_unique<rosbag2_cpp::Reader>();
 
   // Get the topic name which should be read from the bag
   bag_joint_state_topic_ = get_node()->get_parameter("bag_topic").as_string();
@@ -126,12 +123,17 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_cleanup(const
 controller_interface::CallbackReturn
 nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(const rclcpp_lifecycle::State
                                                                               & /*previous_state*/) {
+
+  // Get the bag uri parameter and create bag reader object
+  auto bag_storage_options = rosbag2_storage::StorageOptions();
+  bag_storage_options.uri = get_node()->get_parameter("bag_uri").as_string();
+
   // Open the bag
   try {
-    bag_reader_->open(bag_storage_options_);
+    bag_reader_->open(bag_storage_options);
   } catch (const std::runtime_error &error) {
     RCLCPP_ERROR(
-      get_node()->get_logger(), "Could not open bag %s, error: %s", bag_storage_options_.uri.c_str(), error.what()
+      get_node()->get_logger(), "Could not open bag %s, error: %s", bag_storage_options.uri.c_str(), error.what()
     );
     return CallbackReturn::ERROR;
   }
@@ -147,7 +149,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(cons
       find_it == std::end(bag_topics_metadata)) {
     RCLCPP_ERROR(
       get_node()->get_logger(), "Could not find topic %s with type %s in bag %s", this->bag_joint_state_topic_.c_str(),
-      rosidl_generator_traits::name<RecordedTopicMsg>(), bag_storage_options_.uri.c_str()
+      rosidl_generator_traits::name<RecordedTopicMsg>(), bag_storage_options.uri.c_str()
     );
     return CallbackReturn::ERROR;
   }
