@@ -55,7 +55,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
     auto_declare<std::vector<double>>("k_gains", {});
     auto_declare<std::vector<double>>("d_gains", {});
     auto_declare<std::string>("bag_uri", "");
-    auto_declare<std::string>("bag_topic", "");
+    auto_declare<std::string>("bag_topic", DEFAULT_RECORD_TOPIC);
   } catch (const std::exception &e) {
     (void)fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -212,7 +212,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
 
       // Store the joint positions in the bag message as desired joint positions
       for (size_t i = 0; i < N_JOINTS; i++) {
-        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->measured_joint_state.position.at(i);
+        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->position.at(i);
       }
 
       // We have found the next desired joint position, stop the loop

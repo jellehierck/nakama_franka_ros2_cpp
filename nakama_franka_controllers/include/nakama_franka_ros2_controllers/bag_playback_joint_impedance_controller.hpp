@@ -32,7 +32,10 @@ namespace nakama_franka_controllers {
 class BagPlaybackJointImpedanceController : public controller_interface::ControllerInterface {
  public:
   /// Set the type of the recorded message
-  using RecordedTopicMsg = franka_msgs::msg::FrankaRobotState;
+  using RecordedTopicMsg = sensor_msgs::msg::JointState;
+
+  /// Default recording topic name to which the recorded messages are stored
+  static constexpr const char *DEFAULT_RECORD_TOPIC = "/franka/joint_state";
 
   static constexpr const size_t N_JOINTS = 7;
   using Vector7d = Eigen::Matrix<double, N_JOINTS, 1>;
