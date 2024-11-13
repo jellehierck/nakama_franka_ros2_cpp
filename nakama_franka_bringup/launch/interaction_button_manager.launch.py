@@ -83,7 +83,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="spawner",
                 arguments=[
                     "nakama_bag_playback_joint_impedance_controller",
-                    "--load-only",  # Important: load the controller but do not configure
+                    "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [

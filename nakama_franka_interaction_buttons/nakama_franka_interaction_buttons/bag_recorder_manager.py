@@ -1,11 +1,13 @@
 from enum import auto
 
 import rclpy
-from builtin_interfaces.msg import Duration
-from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
 from rclpy.task import Future
+
+from builtin_interfaces.msg import Duration
+from rcl_interfaces.msg import ParameterDescriptor, Parameter, ParameterType, ParameterValue, SetParametersResult
+from rcl_interfaces.srv import SetParameters
 
 from controller_manager_msgs.srv import SwitchController
 
@@ -92,9 +94,18 @@ class BagRecorderManager(Node):
                 while not client_wrapper.client.wait_for_service(timeout_sec=2.0):
                     self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
 
+        # Set parameter service
+        # TODO: Update this to use a synchronous call instead? Or remove the hardcoded controller name
+        self.set_parameters_service = AsyncClientWrapper(
+            self.create_client(
+                SetParameters, srv_name="/nakama_bag_playback_joint_impedance_controller/set_parameters"
+            )
+        )
+        # We do not wait for the set_parameters_service
+
         # Controller manager services
         self.switch_controller_service = AsyncClientWrapper(
-            self.create_client(SwitchController, srv_name="controller_manager/switch_controller")
+            self.create_client(SwitchController, srv_name="/controller_manager/switch_controller")
         )
         wait_for_service(self.switch_controller_service)
 
@@ -318,7 +329,7 @@ class BagRecorderManager(Node):
         self.state = BagRecorderManagerState.STARTING_RECORDING
         request = StartBagRecording.Request(
             # TODO: Create better bag path and name, perhaps based on participant etc
-            bag_path="recordings/",
+            bag_path="bags/recordings/",
             bag_name=f"recording_{len(self.recorded_bag_uris):03}",
             append_timestamp=False,
         )
@@ -372,7 +383,7 @@ class BagRecorderManager(Node):
         """Enter the `STARTING_OPERATING` transition state."""
         self.state = BagRecorderManagerState.STARTING_OPERATING
         # Transition to the operating state immediately
-        self.start_operating_finished
+        self.start_operating_finished()
 
     def start_operating_finished(self) -> None:
         """End of the `STARTING_OPERATING` transition phase.
@@ -399,6 +410,36 @@ class BagRecorderManager(Node):
     def start_replaying(self) -> None:
         """Enter the `STARTING_REPLAYING` transition state."""
         self.state = BagRecorderManagerState.STARTING_REPLAYING
+
+        # Check if we can play back the next recording
+        if self.nr_recordings_played_back >= len(self.recorded_bag_uris):
+            self.get_logger().error("There is no new recording to play back!")
+            self.state = BagRecorderManagerState.ERROR
+            return
+
+        bag_uri_parameter_request = SetParameters.Request(
+            parameters=[
+                Parameter(
+                    name="bag_uri",
+                    value=ParameterValue(
+                        type=ParameterType.PARAMETER_STRING,
+                        string_value=self.recorded_bag_uris[self.nr_recordings_played_back],
+                    ),
+                )
+            ]
+        )
+        bag_uri_parameter_future = self.set_parameters_service.call_async(bag_uri_parameter_request)
+        # TODO: This currently deadlocks. add a separate executor for service callbacks
+        rclpy.spin_until_future_complete(self, bag_uri_parameter_future)
+        resolved_bag_uri_parameter_future: SetParameters.Response | None = bag_uri_parameter_future.result()  # type: ignore
+        if resolved_bag_uri_parameter_future is None or any(
+            not result.successful for result in resolved_bag_uri_parameter_future.results
+        ):
+            reasons: list[str] = [result.reason for result in resolved_bag_uri_parameter_future.results]  # type: ignore
+            self.get_logger().error(f"Could not update the bag URI parameter. Reason: {reasons}")
+            self.state = BagRecorderManagerState.ERROR
+            return
+
         request = SwitchController.Request(
             # TODO: Make controller name configurable
             activate_controllers=["nakama_bag_playback_joint_impedance_controller"],
@@ -430,6 +471,9 @@ class BagRecorderManager(Node):
     def stop_replaying(self) -> None:
         """Enter the `STOPPING_REPLAYING` transition state."""
         self.state = BagRecorderManagerState.STOPPING_REPLAYING
+
+        self.nr_recordings_played_back += 1  # Update the number of recordings which are played back
+
         request = SwitchController.Request(
             # TODO: Make controller name configurable
             activate_controllers=[],
