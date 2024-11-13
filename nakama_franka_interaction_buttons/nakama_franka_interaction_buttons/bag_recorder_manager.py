@@ -25,9 +25,13 @@ class BagRecorderManagerState(StrEnum):
 
     ERROR = auto()
 
-    PLAYING_BACK = auto()
-    STOPPING_PLAYBACK = auto()
-    STARTING_PLAYBACK = auto()
+    OPERATING_IDLE = auto()
+    STOPPING_OPERATING = auto()
+    STARTING_OPERATING = auto()
+
+    REPLAYING = auto()
+    STOPPING_REPLAYING = auto()
+    STARTING_REPLAYING = auto()
 
     TRAINING_IDLE = auto()
     STARTING_TRAINING = auto()
@@ -210,6 +214,11 @@ class BagRecorderManager(Node):
                 self.start_training()
                 return
 
+            if msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
+                self.start_operating()
+                return
+
+        # Training states
         if self.state == BagRecorderManagerState.TRAINING_IDLE:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_recording()
@@ -222,6 +231,21 @@ class BagRecorderManager(Node):
         if self.state == BagRecorderManagerState.RECORDING:  # noqa: SIM102
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.stop_recording()
+                return
+
+        # Operating states
+        if self.state == BagRecorderManagerState.OPERATING_IDLE:
+            if msg.press_type == BeeButtonPress.PRESSED:
+                self.start_replaying()
+                return
+
+            elif msg.press_type == BeeButtonPress.LONG_PRESS:  # noqa: RET505
+                self.stop_operating()
+                return
+
+        if self.state == BagRecorderManagerState.REPLAYING:  # noqa: SIM102
+            if msg.press_type == BeeButtonPress.PRESSED:
+                self.stop_replaying()
                 return
 
         # The current combination of state and button press type has no effect
@@ -343,6 +367,96 @@ class BagRecorderManager(Node):
 
         else:
             self.state = BagRecorderManagerState.TRAINING_IDLE
+
+    def start_operating(self) -> None:
+        """Enter the `STARTING_OPERATING` transition state."""
+        self.state = BagRecorderManagerState.STARTING_OPERATING
+        # Transition to the operating state immediately
+        self.start_operating_finished
+
+    def start_operating_finished(self) -> None:
+        """End of the `STARTING_OPERATING` transition phase.
+
+        Possible next states:
+        - Always transitions to: `OPERATING_IDLE`
+        """
+        self.state = BagRecorderManagerState.OPERATING_IDLE
+
+    def stop_operating(self) -> None:
+        """Enter the `STOPPING_OPERATING` transition state."""
+        self.state = BagRecorderManagerState.STOPPING_OPERATING
+        # Transition to the operating state immediately
+        self.stop_operating_finished
+
+    def stop_operating_finished(self) -> None:
+        """End of the `STOPPING_OPERATING` transition phase.
+
+        Possible next states:
+        - Always transitions to: `IDLE`
+        """
+        self.state = BagRecorderManagerState.IDLE
+
+    def start_replaying(self) -> None:
+        """Enter the `STARTING_REPLAYING` transition state."""
+        self.state = BagRecorderManagerState.STARTING_REPLAYING
+        request = SwitchController.Request(
+            # TODO: Make controller name configurable
+            activate_controllers=["nakama_bag_playback_joint_impedance_controller"],
+            deactivate_controllers=[],
+            strictness=SwitchController.Request.STRICT,
+            activate_asap=True,
+            timeout=Duration(sec=1),
+        )
+        self.switch_controller_service.call_async(request, done_callback=self.start_replaying_finished)
+
+    def start_replaying_finished(self, resolved_future: Future) -> None:
+        """End of the `STARTING_REPLAYING` transition phase.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `REPLAYING`
+        - `SwitchController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
+        """
+        response: SwitchController.Response | None = resolved_future.result()
+
+        if response is None or not response.ok:
+            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.REPLAYING}")
+            self.state = BagRecorderManagerState.ERROR
+
+        else:
+            self.state = BagRecorderManagerState.REPLAYING
+
+    def stop_replaying(self) -> None:
+        """Enter the `STOPPING_REPLAYING` transition state."""
+        self.state = BagRecorderManagerState.STOPPING_REPLAYING
+        request = SwitchController.Request(
+            # TODO: Make controller name configurable
+            activate_controllers=[],
+            deactivate_controllers=["nakama_bag_playback_joint_impedance_controller"],
+            strictness=SwitchController.Request.STRICT,
+            activate_asap=True,
+            timeout=Duration(sec=1),
+        )
+        self.switch_controller_service.call_async(request, done_callback=self.stop_replaying_finished)
+
+    def stop_replaying_finished(self, resolved_future: Future) -> None:
+        """End of the `STOPPING_REPLAYING` transition phase.
+
+        Possible next states:
+        - `SwitchController` response indicated success: `OPERATING_IDLE`
+        - `SwitchController` response indicated failure: `ERROR`
+
+        :param resolved_future: Resolved future of the service request to start recording.
+        """
+        response: SwitchController.Response | None = resolved_future.result()
+
+        if response is None or not response.ok:
+            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.OPERATING_IDLE}")
+            self.state = BagRecorderManagerState.ERROR
+
+        else:
+            self.state = BagRecorderManagerState.OPERATING_IDLE
 
 
 def main(args: list[str] | None = None) -> None:
