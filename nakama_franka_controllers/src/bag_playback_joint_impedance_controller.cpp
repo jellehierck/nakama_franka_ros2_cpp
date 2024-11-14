@@ -158,7 +158,6 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(cons
   // Initialize controller variables
   update_joint_states();
   joint_velocities_curr_filtered_.setZero();
-  joint_positions_init_ = joint_positions_curr_;
   elapsed_sec_ = 0.0;
 
   // Indicate that reading is started
@@ -277,6 +276,11 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
   for (size_t i = 0; i < N_JOINTS; i++) {
     command_interfaces_[i].set_value(joint_torques_command(static_cast<int>(i)));
   }
+
+  RCLCPP_INFO(get_node()->get_logger(), "---");
+  RCLCPP_INFO(get_node()->get_logger(), "joint_positions_desired: %s", vec_to_str(joint_positions_desired).c_str());
+  RCLCPP_INFO(get_node()->get_logger(), "joint_positions_curr_:   %s", vec_to_str(joint_positions_curr_).c_str());
+  RCLCPP_INFO(get_node()->get_logger(), "joint_torques_command:   %s", vec_to_str(joint_torques_command).c_str());
 
   return controller_interface::return_type::OK;
 }
