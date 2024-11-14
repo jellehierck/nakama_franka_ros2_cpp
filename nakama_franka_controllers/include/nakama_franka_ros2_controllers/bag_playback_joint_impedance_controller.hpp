@@ -1,6 +1,7 @@
 #ifndef NAKAMA_FRANKA_ROS2_CONTROLLERS_BAG_PLAYBACK_JOINT_IMPEDANCE_CONTROLLER
 #define NAKAMA_FRANKA_ROS2_CONTROLLERS_BAG_PLAYBACK_JOINT_IMPEDANCE_CONTROLLER
 
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <memory>
@@ -120,6 +121,7 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
   double motion_duration_sec_ = DEFAULT_MOTION_DURATION_SEC;
 
   rclcpp::Time start_time_;
+  std::atomic_bool is_reading_{false};
 };
 
 }  // namespace nakama_franka_controllers
