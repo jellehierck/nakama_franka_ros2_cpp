@@ -163,6 +163,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(cons
 
   // Indicate that reading is started
   is_reading_.store(true);
+  this->get_node()->set_parameter({"process_finished", false});
 
   return CallbackReturn::SUCCESS;
 }

@@ -144,6 +144,8 @@ def generate_launch_description():  # noqa: ANN201, D103
                 parameters=[
                     {"update_rate": 50.0},
                 ],
+                # Limit log level so not all messages are shown
+                arguments=["--ros-args", "--log-level", "WARN"],
             ),
             # Bag recorder manager node
             Node(

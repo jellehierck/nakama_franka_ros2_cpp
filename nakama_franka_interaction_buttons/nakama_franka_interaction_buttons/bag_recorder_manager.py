@@ -120,6 +120,14 @@ class BagRecorderManager(Node):
                     self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
 
         # Relevant parameter services
+        self.get_playback_controller_parameters_service = AsyncClientWrapper(
+            self.create_client(
+                GetParameters,
+                srv_name=f"{self.playback_controller_param.get_parameter_value().string_value}/get_parameters",
+                callback_group=self.async_service_callback_group,
+            )
+        )
+
         self.set_playback_controller_parameters_service = AsyncClientWrapper(
             self.create_client(
                 SetParameters,
@@ -136,10 +144,10 @@ class BagRecorderManager(Node):
             )
         )
 
-        self.get_playback_controller_parameters_service = AsyncClientWrapper(
+        self.set_homing_controller_parameters_service = AsyncClientWrapper(
             self.create_client(
-                GetParameters,
-                srv_name=f"{self.playback_controller_param.get_parameter_value().string_value}/get_parameters",
+                SetParameters,
+                srv_name=f"{self.homing_controller_param.get_parameter_value().string_value}/set_parameters",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -495,6 +503,24 @@ class BagRecorderManager(Node):
             self.get_logger().error("Error during homing: could not deactivate homing controller")
             self.state = BagRecorderManagerState.ERROR
             return
+
+        # Create a service request to reset the process finished flag
+        # TODO: This is currently a bug in `franka_example_controllers/MoveToStartExampleController`, where parameter
+        # `"process_finished"` is not reset when the controller is reactivated
+        self.set_homing_controller_parameters_service.call_async(
+            SetParameters.Request(
+                parameters=[
+                    Parameter(
+                        name="process_finished",
+                        value=ParameterValue(
+                            type=ParameterType.PARAMETER_BOOL,
+                            bool_value=False,
+                        ),
+                    )
+                ]
+            ),
+            done_callback=None,  # We do not wait for a response
+        )
 
         # All is OK, we can now move back into the operating state
         self.start_operating()
