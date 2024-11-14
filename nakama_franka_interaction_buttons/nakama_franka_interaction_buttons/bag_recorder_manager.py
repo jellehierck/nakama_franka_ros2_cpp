@@ -198,7 +198,7 @@ class BagRecorderManager(Node):
 
     def set_button_color_from_state(self, state: BagRecorderManagerState) -> None:
         """Send a button color effect request based on a state."""
-        if str(state == BagRecorderManagerState.ERROR):
+        if state == BagRecorderManagerState.ERROR:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -209,7 +209,7 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif str(state == BagRecorderManagerState.IDLE):
+        elif state == BagRecorderManagerState.IDLE:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -220,7 +220,7 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == str(BagRecorderManagerState.TRAINING_IDLE):
+        elif state == BagRecorderManagerState.TRAINING_IDLE:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
@@ -231,12 +231,46 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == str(BagRecorderManagerState.RECORDING):
+        elif state == BagRecorderManagerState.RECORDING:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.PURPLE),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        elif state == BagRecorderManagerState.OPERATING_IDLE:
+            self.set_button_color_service.call_async(
+                request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
+                    color=BeeButtonColor(value=BeeButtonColor.YELLOW),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+        elif state == BagRecorderManagerState.REPLAYING:
+            self.set_button_color_service.call_async(
+                request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    effect=BeeButtonSetColor.Request.EFFECT_BLINK,
+                    color=BeeButtonColor(value=BeeButtonColor.ORANGE),
+                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
+                ),
+                done_callback=None,  # We do not care about the result of setting the color
+            )
+
+
+        elif state == BagRecorderManagerState.TRAINING_HOMING or state == BagRecorderManagerState.OPERATING_HOMING:
+            self.set_button_color_service.call_async(
+                request=BeeButtonSetColor.Request(
+                    broadcast=True,
+                    effect=BeeButtonSetColor.Request.EFFECT_BLINK,
+                    color=BeeButtonColor(value=BeeButtonColor.PINK),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
                 done_callback=None,  # We do not care about the result of setting the color
@@ -248,7 +282,7 @@ class BagRecorderManager(Node):
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
                     effect=BeeButtonSetColor.Request.EFFECT_BLINK,
-                    color=BeeButtonColor(value=BeeButtonColor.YELLOW),
+                    color=BeeButtonColor(value=BeeButtonColor.CYAN),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
                 done_callback=None,  # We do not care about the result of setting the color
@@ -273,7 +307,7 @@ class BagRecorderManager(Node):
                 return
 
         # Training states
-        if self.state == BagRecorderManagerState.TRAINING_IDLE:
+        elif self.state == BagRecorderManagerState.TRAINING_IDLE:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_recording()
                 return
@@ -282,13 +316,17 @@ class BagRecorderManager(Node):
                 self.stop_training()
                 return
 
-        if self.state == BagRecorderManagerState.RECORDING:  # noqa: SIM102
+            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:  # noqa: RET505
+                self.start_training_homing()
+                return
+
+        elif self.state == BagRecorderManagerState.RECORDING:  # noqa: SIM102
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.stop_recording()
                 return
 
         # Operating states
-        if self.state == BagRecorderManagerState.OPERATING_IDLE:
+        elif self.state == BagRecorderManagerState.OPERATING_IDLE:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_replaying()
                 return
@@ -297,7 +335,12 @@ class BagRecorderManager(Node):
                 self.stop_operating()
                 return
 
-        if self.state == BagRecorderManagerState.REPLAYING:  # noqa: SIM102
+            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:  # noqa: RET505
+                self.start_operating_homing()
+                return
+
+        elif self.state == BagRecorderManagerState.REPLAYING:  # noqa: SIM102
+            # TODO: Replace this with an automatic detection of playback finished
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.stop_replaying()
                 return

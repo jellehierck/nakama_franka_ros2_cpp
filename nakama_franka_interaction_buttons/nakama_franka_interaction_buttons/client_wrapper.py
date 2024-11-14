@@ -34,7 +34,7 @@ class AsyncClientWrapper:
         """Send the service request to the client asynchronously. A done callback can be registered which is called when
         the future resolves.
 
-        Note: this function behaviour is undefined if called before the any previous future is resolved.
+        Note: this function behaviour is undefined if called before any previous future is resolved.
 
         :param request: Request to send.
         :param done_callback: (optional) Done callback to add to the future when it resolves. If not given or set to
