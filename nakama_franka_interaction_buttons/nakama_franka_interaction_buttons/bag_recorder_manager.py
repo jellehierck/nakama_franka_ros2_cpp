@@ -137,7 +137,7 @@ class BagRecorderManager(Node):
         # Create service clients to be able to make service requests
         def wait_for_service(client_wrapper: AsyncClientWrapper) -> None:
             """Helper function to wait on the service to become availabe if `wait_for_services` parameter is True."""
-            if self.wait_for_services_param.get_parameter_value().bool_value:
+            if self.get_parameter(self.wait_for_services_param.name).get_parameter_value().bool_value:
                 # Wait for some seconds before logging a new message that the service is unavailable
                 while not client_wrapper.client.wait_for_service(timeout_sec=2.0):
                     self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
@@ -233,23 +233,23 @@ class BagRecorderManager(Node):
 
     @property
     def training_controller(self) -> str:
-        return self.training_controller_param.get_parameter_value().string_value
+        return self.get_parameter(self.training_controller_param.name).get_parameter_value().string_value
 
     @property
     def playback_controller(self) -> str:
-        return self.playback_controller_param.get_parameter_value().string_value
+        return self.get_parameter(self.playback_controller_param.name).get_parameter_value().string_value
 
     @property
     def homing_controller(self) -> str:
-        return self.homing_controller_param.get_parameter_value().string_value
+        return self.get_parameter(self.homing_controller_param.name).get_parameter_value().string_value
 
     @property
     def participant_nr(self) -> int:
-        return self.participant_nr_param.get_parameter_value().integer_value
+        return self.get_parameter(self.participant_nr_param.name).get_parameter_value().integer_value
 
     @property
     def curr_task_nr(self) -> int:
-        return self.curr_task_nr_param.get_parameter_value().integer_value
+        return self.get_parameter(self.curr_task_nr_param.name).get_parameter_value().integer_value
 
     @curr_task_nr.setter
     def curr_task_nr(self, new_nr: int) -> None:
@@ -260,7 +260,7 @@ class BagRecorderManager(Node):
 
     @property
     def base_bag_path(self) -> str:
-        return self.base_bag_path_param.get_parameter_value().string_value
+        return self.get_parameter(self.base_bag_path_param.name).get_parameter_value().string_value
 
     def curr_participant_task_to_bag_name(self) -> str:
         return f"participant_{self.participant_nr:03}/task_{self.curr_task_nr:03}"
@@ -531,7 +531,7 @@ class BagRecorderManager(Node):
 
         else:
             # Increment the current task number to keep track of how many tasks are recorded
-            self.curr_task_nr += 1
+            self.curr_task_nr = 1
             self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def start_operating_homing(self) -> None:
@@ -797,7 +797,7 @@ class BagRecorderManager(Node):
             return
 
         # Increment the current task number to keep track of how many tasks are played back
-        self.curr_task_nr += 1
+        self.curr_task_nr = self.curr_task_nr + 1
 
         # All is OK, we can now move back into the operating state
         self.start_operating()
