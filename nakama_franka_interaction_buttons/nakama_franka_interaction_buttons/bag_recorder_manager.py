@@ -53,7 +53,6 @@ class BagRecorderManagerState(StrEnum):
     STARTING_RECORDING = auto()
 
 
-
 class BagRecorderManager(Node):
     """Bag recorder manager node.
 
@@ -74,14 +73,30 @@ class BagRecorderManager(Node):
         self.nr_recordings_played_back = 0
 
         # Declare parameters
-        # TODO: Add parameter for playback controller name
-        # self.recorder_controller_param = self.declare_parameter(
-        #     name="recorder_controller",
-        #     value="nakama_bag_recorder_controller",
-        #     descriptor=ParameterDescriptor(
-        #         description="Name of the recorder controller to be loaded into the controller manager",
-        #     ),
-        # )
+        self.playback_controller_param = self.declare_parameter(
+            name="playback_controller",
+            value="nakama_bag_playback_joint_impedance_controller",
+            descriptor=ParameterDescriptor(
+                description="Name of the controller used for playback of recorded tasks",
+                read_only=True,  # Only takes effect when the node is started
+            ),
+        )
+        self.training_controller_param = self.declare_parameter(
+            name="training_controller",
+            value="franka_gravity_compensation_example_controller",
+            descriptor=ParameterDescriptor(
+                description="Name of the compliant controller used for training and recording tasks",
+                read_only=True,  # Only takes effect when the node is started
+            ),
+        )
+        self.homing_controller_param = self.declare_parameter(
+            name="homing_controller",
+            value="franka_move_to_start_example_controller",
+            descriptor=ParameterDescriptor(
+                description="Name of the homing controller",
+                read_only=True,  # Only takes effect when the node is started
+            ),
+        )
 
         self.wait_for_services_param = self.declare_parameter(
             name="wait_for_services",
@@ -109,7 +124,7 @@ class BagRecorderManager(Node):
             self.create_client(
                 SetParameters,
                 # TODO: Remove the hardcoded controller name
-                srv_name="/nakama_bag_playback_joint_impedance_controller/set_parameters",
+                srv_name=f"{self.playback_controller_param.get_parameter_value().string_value}/set_parameters",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -119,7 +134,7 @@ class BagRecorderManager(Node):
             self.create_client(
                 GetParameters,
                 # TODO: Remove the hardcoded controller name
-                srv_name="/franka_move_to_start_example_controller/get_parameters",
+                srv_name=f"{self.homing_controller_param.get_parameter_value().string_value}/get_parameters",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -129,7 +144,7 @@ class BagRecorderManager(Node):
         self.switch_controller_service = AsyncClientWrapper(
             self.create_client(
                 SwitchController,
-                srv_name="/controller_manager/switch_controller",
+                srv_name="controller_manager/switch_controller",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -139,7 +154,7 @@ class BagRecorderManager(Node):
         self.start_recording_service = AsyncClientWrapper(
             self.create_client(
                 StartBagRecording,
-                srv_name="/joint_state_bag_recorder/start_recording",
+                srv_name="joint_state_bag_recorder/start_recording",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -148,7 +163,7 @@ class BagRecorderManager(Node):
         self.stop_recording_service = AsyncClientWrapper(
             self.create_client(
                 StopBagRecording,
-                srv_name="/joint_state_bag_recorder/stop_recording",
+                srv_name="joint_state_bag_recorder/stop_recording",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -158,7 +173,7 @@ class BagRecorderManager(Node):
         self.set_button_color_service = AsyncClientWrapper(
             self.create_client(
                 BeeButtonSetColor,
-                srv_name="/bee_buttons/set_button_color",
+                srv_name="bee_buttons/set_button_color",
                 callback_group=self.async_service_callback_group,
             )
         )
@@ -187,7 +202,6 @@ class BagRecorderManager(Node):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.RED),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
@@ -199,7 +213,6 @@ class BagRecorderManager(Node):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.GREEN),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
@@ -211,7 +224,6 @@ class BagRecorderManager(Node):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.BLUE),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
@@ -223,7 +235,6 @@ class BagRecorderManager(Node):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
                     color=BeeButtonColor(value=BeeButtonColor.PURPLE),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
@@ -236,7 +247,6 @@ class BagRecorderManager(Node):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    node_ids=[],  # TODO: Target specific button?
                     effect=BeeButtonSetColor.Request.EFFECT_BLINK,
                     color=BeeButtonColor(value=BeeButtonColor.YELLOW),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
@@ -252,12 +262,6 @@ class BagRecorderManager(Node):
 
         This will trigger state transitions based on the press type and current state.
         """
-        # Check that the button press comes from the correct button
-        # TODO: Make node ID configurable
-        # if msg.node_id != "443":
-        #     self.get_logger().warn(f"Got button press from button {msg.node_id} which this node does not listen to")
-        #     return
-
         # Define which specific button press types are handled in specific states
         if self.state == BagRecorderManagerState.IDLE:
             if msg.press_type == BeeButtonPress.LONG_PRESS:
@@ -336,8 +340,7 @@ class BagRecorderManager(Node):
         self.state = BagRecorderManagerState.STARTING_TRAINING
 
         response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller name configurable
-            activate_controllers=["franka_gravity_compensation_example_controller"]
+            activate_controllers=[self.training_controller_param.get_parameter_value().string_value]
         )
 
         if response is None or not response.ok:
@@ -357,8 +360,7 @@ class BagRecorderManager(Node):
         self.state = BagRecorderManagerState.STOPPING_TRAINING
 
         response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller name configurable
-            deactivate_controllers=["franka_gravity_compensation_example_controller"],
+            deactivate_controllers=[self.training_controller_param.get_parameter_value().string_value],
         )
 
         if response is None or not response.ok:
@@ -423,8 +425,7 @@ class BagRecorderManager(Node):
         # Activate the homing controller
         self.state = BagRecorderManagerState.STARTING_OPERATING_HOMING
         activate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller name configurable
-            activate_controllers=["franka_move_to_start_example_controller"],
+            activate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
         )
 
         # If an error occurred, go into the error state and return early
@@ -443,8 +444,7 @@ class BagRecorderManager(Node):
         # Deactivate the homing controller
         self.state = BagRecorderManagerState.STOPPING_OPERATING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller name configurable
-            deactivate_controllers=["franka_move_to_start_example_controller"],
+            deactivate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
         )
 
         # If an error occurred, go into the error state and return early
@@ -466,9 +466,8 @@ class BagRecorderManager(Node):
         # Switch the homing controller in and the gravity compensation controller (from TRAINING state) out
         self.state = BagRecorderManagerState.STARTING_TRAINING_HOMING
         activate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller names configurable
-            activate_controllers=["franka_move_to_start_example_controller"],
-            deactivate_controllers=["franka_gravity_compensation_example_controller"],
+            activate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
+            deactivate_controllers=[self.training_controller_param.get_parameter_value().string_value],
         )
 
         # If an error occurred, go into the error state and return early
@@ -484,12 +483,11 @@ class BagRecorderManager(Node):
             self.get_logger().error("Error during homing: homing was not successful")
             self.state = BagRecorderManagerState.ERROR
 
-        # Only deactivate the homing controller: the gravity compensation controller is reactivated later in the 
+        # Only deactivate the homing controller: the gravity compensation controller is reactivated later in the
         # `start_training()` method
         self.state = BagRecorderManagerState.STOPPING_TRAINING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            # TODO: Make controller name configurable
-            deactivate_controllers=["franka_move_to_start_example_controller"],
+            deactivate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
         )
 
         # If an error occurred, go into the error state and return early
@@ -524,11 +522,11 @@ class BagRecorderManager(Node):
                 self.get_logger().error("Checking if homing is finished gave a malformed response.")
                 self.state = BagRecorderManagerState.ERROR
                 return False  # Indicate failure
-            
+
             # Check if the response indicated that the controller is finished
             if homing_finished_response.values[0].bool_value is True:
                 return True  # Indicate success
-            
+
             # If not finished, sleep for a short time before trying again
             time.sleep(0.2)
 
@@ -594,8 +592,7 @@ class BagRecorderManager(Node):
 
         # Now we can activate the playback controller
         request = SwitchController.Request(
-            # TODO: Make controller name configurable
-            activate_controllers=["nakama_bag_playback_joint_impedance_controller"],
+            activate_controllers=[self.playback_controller_param.get_parameter_value().string_value],
             deactivate_controllers=[],
             strictness=SwitchController.Request.STRICT,
             activate_asap=True,
@@ -618,18 +615,11 @@ class BagRecorderManager(Node):
         - `SwitchController` response indicated failure: `ERROR`
         """
         self.state = BagRecorderManagerState.STOPPING_REPLAYING
-
         self.nr_recordings_played_back += 1  # Update the number of recordings which are played back
 
-        request = SwitchController.Request(
-            # TODO: Make controller name configurable
-            activate_controllers=[],
-            deactivate_controllers=["nakama_bag_playback_joint_impedance_controller"],
-            strictness=SwitchController.Request.STRICT,
-            activate_asap=True,
-            timeout=Duration(sec=1),
+        response: SwitchController.Response | None = self.switch_controllers_sync_and_wait(
+            deactivate_controllers=[self.playback_controller_param.get_parameter_value().string_value],
         )
-        response: SwitchController.Response | None = self.switch_controller_service.call_sync_and_await(request)
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.OPERATING_IDLE}")
