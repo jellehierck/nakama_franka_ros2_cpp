@@ -625,6 +625,24 @@ class BagRecorderManager(Node):
             self.get_logger().error("Error during homing: homing was not successful")
             self.state = BagRecorderManagerState.ERROR
 
+        # Create a service request to reset the process finished flag
+        # TODO: This is currently a bug in `franka_example_controllers/MoveToStartExampleController`, where parameter
+        # `"process_finished"` is not reset when the controller is reactivated
+        self.set_homing_controller_parameters_service.call_async(
+            SetParameters.Request(
+                parameters=[
+                    Parameter(
+                        name="process_finished",
+                        value=ParameterValue(
+                            type=ParameterType.PARAMETER_BOOL,
+                            bool_value=False,
+                        ),
+                    )
+                ]
+            ),
+            done_callback=None,  # We do not wait for a response
+        )
+
         # Switch the homing controller out and the gravity compensation controller in
         self.state = BagRecorderManagerState.STOPPING_TRAINING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
