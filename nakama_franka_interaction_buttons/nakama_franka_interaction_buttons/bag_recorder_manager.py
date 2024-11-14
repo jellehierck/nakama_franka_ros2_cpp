@@ -264,7 +264,6 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-
         elif state == BagRecorderManagerState.TRAINING_HOMING or state == BagRecorderManagerState.OPERATING_HOMING:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
