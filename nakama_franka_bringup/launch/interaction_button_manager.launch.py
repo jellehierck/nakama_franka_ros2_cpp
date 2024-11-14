@@ -143,6 +143,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="bee_buttons",
                 parameters=[
                     {"update_rate": 50.0},
+                    {"battery_info_on_startup": False},
                 ],
                 # Limit log level so not all messages are shown
                 arguments=["--ros-args", "--log-level", "WARN"],
@@ -154,6 +155,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 parameters=[
                     {"recorder_controller": "nakama_bag_recorder_controller"},
                     {"wait_for_services": False},
+                    {"participant_nr": 1},
                 ],
             ),
         ]
