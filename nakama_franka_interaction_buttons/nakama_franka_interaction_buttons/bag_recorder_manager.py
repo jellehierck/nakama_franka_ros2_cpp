@@ -531,7 +531,7 @@ class BagRecorderManager(Node):
 
         else:
             # Increment the current task number to keep track of how many tasks are recorded
-            self.curr_task_nr = 1
+            self.curr_task_nr += 1
             self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def start_operating_homing(self) -> None:
@@ -797,7 +797,7 @@ class BagRecorderManager(Node):
             return
 
         # Increment the current task number to keep track of how many tasks are played back
-        self.curr_task_nr = self.curr_task_nr + 1
+        self.curr_task_nr += 1
 
         # All is OK, we can now move back into the operating state
         self.start_operating()
