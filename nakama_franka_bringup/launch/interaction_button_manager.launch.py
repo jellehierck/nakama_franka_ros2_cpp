@@ -21,6 +21,9 @@ def generate_launch_description():  # noqa: ANN201, D103
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
 
+    # HMI experiment launch arguments
+    participant_nr_parameter_name = "participant_nr"
+
     return LaunchDescription(
         [
             # Declare all launch arguments
@@ -54,6 +57,11 @@ def generate_launch_description():  # noqa: ANN201, D103
                 default_value="false",
                 description="Use Franka Gripper as an end-effector, otherwise, the robot is loaded "
                 "without an end-effector.",
+            ),
+            # HMI experiment launch arguments
+            DeclareLaunchArgument(
+                participant_nr_parameter_name,
+                description="Which participant number to use.",
             ),
             # Franka bringup
             IncludeLaunchDescription(
@@ -153,9 +161,11 @@ def generate_launch_description():  # noqa: ANN201, D103
                 package="nakama_franka_interaction_buttons",
                 executable="bag_recorder_manager",
                 parameters=[
-                    {"recorder_controller": "nakama_bag_recorder_controller"},
                     {"wait_for_services": False},
-                    {"participant_nr": 1},
+                    {"participant_nr": LaunchConfiguration(participant_nr_parameter_name)},
+                    {"training_controller": "franka_gravity_compensation_example_controller"},
+                    {"playback_controller": "nakama_bag_playback_joint_impedance_controller"},
+                    {"homing_controller": "franka_move_to_start_example_controller"},
                 ],
             ),
         ]
