@@ -200,7 +200,7 @@ def generate_launch_description():  # noqa: ANN201, D103
                 package="nakama_franka_interaction_buttons",
                 executable="bag_recorder_manager",
                 parameters=[
-                    {"wait_for_services": False},
+                    {"wait_for_services": True},
                     {"participant_nr": LaunchConfiguration(participant_nr_parameter_name)},
                     {"training_controller": "franka_gravity_compensation_example_controller"},
                     {"playback_controller": "nakama_bag_playback_joint_impedance_controller"},

@@ -22,6 +22,12 @@ ros2 launch nakama_franka_bringup interaction_button_manager.launch.py participa
 
 ## Manual launch files
 
+### Gravity compensation controller
+
+```bash
+ros2 launch franka_bringup gravity_compensation_example_controller.launch.py load_gripper:=false robot_ip:=172.16.0.2
+```
+
 ### Move to start controller
 
 ```bash
