@@ -1,9 +1,38 @@
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from datetime import datetime
+
+from launch import LaunchContext, LaunchDescription, LaunchDescriptionEntity
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def start_session_logger(
+    context: LaunchContext, participant_nr_launch_configuration: LaunchConfiguration
+) -> list[LaunchDescriptionEntity] | None:
+    """Start the session logger.
+
+    This is moved to an OpaqueFunction to be able to perform the substitutions and create formatted strings with that
+    information.
+    """
+    participant_nr = int(context.perform_substitution(participant_nr_launch_configuration))
+
+    return [
+        ExecuteProcess(
+            cmd=[
+                "ros2",
+                "bag",
+                "record",
+                # Topics to record
+                "action_log",
+                # Output file
+                "--output",
+                f"/home/fr3/nakama_ws/bags/hmi/participant_{participant_nr:03}/session_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}",
+            ],
+            output="screen",
+        )
+    ]
 
 
 def generate_launch_description():  # noqa: ANN201, D103
@@ -167,6 +196,11 @@ def generate_launch_description():  # noqa: ANN201, D103
                     {"playback_controller": "nakama_bag_playback_joint_impedance_controller"},
                     {"homing_controller": "franka_move_to_start_example_controller"},
                 ],
+            ),
+            # Action recording bag recorder
+            OpaqueFunction(
+                function=start_session_logger,
+                args=[LaunchConfiguration(participant_nr_parameter_name)],
             ),
         ]
     )
