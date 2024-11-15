@@ -7,6 +7,17 @@ source install/setup.bash
 ros2 launch nakama_franka_bringup interaction_button_manager.launch.py participant_nr:=1
 ```
 
+#### Re-recording tasks
+
+1. Delete the task folders for the participant who wants to re-record their tasks.
+   - The task folders are located under `~/nakama_ws/bags/hmi`.
+   - E.g. for participant 1, you need to delete all folders called `~/nakama_ws/bags/hmi/participant_001/task_*`.
+   - (recommended) It is safest to do so from the file explorer, as the files can be restored from the bin afterwards.
+   - (not recommended) `rm -rf ~/nakama_ws/bags/hmi/participant_001/task_*` **Make sure that you have selected the correct participant, there is no undo**.
+2. Move the robot pose into the `training` state.
+3. Let the robot do its `homing` sequence from the `training` state.
+4. Now the participant can re-record their tasks.
+
 ---
 
 ## Manual launch files
