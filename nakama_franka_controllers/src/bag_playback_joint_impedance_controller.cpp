@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -216,7 +217,24 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
 
       // Store the joint positions in the bag message as desired joint positions
       for (size_t i = 0; i < N_JOINTS; i++) {
-        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->position.at(i);
+        // The joint names are likely out of order in the stored message. Therefore, we need to find the index of each
+        // joint name to get the correct value
+
+        // The following lambda will allow us to find the correct joint name (joint names are numbered 1-7)
+        const std::string expected_joint_name = "fr3_joint" + std::to_string(i + 1);
+        auto              is_joint_name = [expected_joint_name](std::string msg_joint_name) -> bool {
+          return msg_joint_name == expected_joint_name;
+        };
+
+        // Find the iterator for the joint name in the received message
+        auto found_name_iterator =
+          std::find_if(deserialized_msg->name.begin(), deserialized_msg->name.end(), is_joint_name);
+
+        // Determine the index of the found joint name
+        long int found_name_index = std::distance(deserialized_msg->name.begin(), found_name_iterator);
+
+        // Use the obtained index to find the corresponding joint position
+        joint_positions_desired(found_name_index) = deserialized_msg->position.at(found_name_index);
       }
 
       // We have found the next desired joint position, stop the loop
