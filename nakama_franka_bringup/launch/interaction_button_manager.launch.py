@@ -4,12 +4,15 @@ from launch import LaunchContext, LaunchDescription, LaunchDescriptionEntity
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def start_session_logger(
-    context: LaunchContext, participant_nr_launch_configuration: LaunchConfiguration
+    context: LaunchContext,
+    participant_nr_launch_configuration: LaunchConfiguration,
+    record_session_launch_configuration: LaunchConfiguration,
 ) -> list[LaunchDescriptionEntity] | None:
     """Start the session logger.
 
@@ -31,6 +34,7 @@ def start_session_logger(
                 f"/home/fr3/nakama_ws/bags/hmi/participant_{participant_nr:03}/session_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}",
             ],
             output="screen",
+            condition=IfCondition(record_session_launch_configuration)
         )
     ]
 
@@ -52,6 +56,7 @@ def generate_launch_description():  # noqa: ANN201, D103
 
     # HMI experiment launch arguments
     participant_nr_parameter_name = "participant_nr"
+    record_session_parameter_name = "record_session"
 
     return LaunchDescription(
         [
@@ -91,6 +96,11 @@ def generate_launch_description():  # noqa: ANN201, D103
             DeclareLaunchArgument(
                 participant_nr_parameter_name,
                 description="Which participant number to use.",
+            ),
+            DeclareLaunchArgument(
+                record_session_parameter_name,
+                default_value="true",
+                description="Whether to record the session's action logs into a rosbag",
             ),
             # Franka bringup
             IncludeLaunchDescription(
@@ -200,7 +210,7 @@ def generate_launch_description():  # noqa: ANN201, D103
             # Action recording bag recorder
             OpaqueFunction(
                 function=start_session_logger,
-                args=[LaunchConfiguration(participant_nr_parameter_name)],
+                args=[LaunchConfiguration(participant_nr_parameter_name), LaunchConfiguration(record_session_parameter_name)],
             ),
         ]
     )
