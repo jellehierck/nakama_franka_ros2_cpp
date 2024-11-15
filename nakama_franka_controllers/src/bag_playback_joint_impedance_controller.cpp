@@ -234,7 +234,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
         long int found_name_index = std::distance(deserialized_msg->name.begin(), found_name_iterator);
 
         // Use the obtained index to find the corresponding joint position
-        joint_positions_desired(found_name_index) = deserialized_msg->position.at(found_name_index);
+        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->position.at(found_name_index);
       }
 
       // We have found the next desired joint position, stop the loop
@@ -267,7 +267,6 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
   if (!joint_positions_desired_optional.has_value()) {
     // No command was obtained, stop the reading new commands
     // TODO: The reason for no command could also be an error, but we do not propagate that error
-    RCLCPP_INFO(get_node()->get_logger(), "Last command is read, the controller is done reading");
 
     // Set the flags which indicate whether the reading is done
     is_reading_.store(false);
@@ -278,6 +277,9 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
       command_interfaces_[i].set_value(0.0);
       return controller_interface::return_type::OK;
     }
+
+    RCLCPP_INFO(get_node()->get_logger(), "Last command is read, the controller is done reading");
+
     return controller_interface::return_type::OK;
   }
 
@@ -294,11 +296,6 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
   for (size_t i = 0; i < N_JOINTS; i++) {
     command_interfaces_[i].set_value(joint_torques_command(static_cast<int>(i)));
   }
-
-  RCLCPP_INFO(get_node()->get_logger(), "---");
-  RCLCPP_INFO(get_node()->get_logger(), "joint_positions_desired: %s", vec_to_str(joint_positions_desired).c_str());
-  RCLCPP_INFO(get_node()->get_logger(), "joint_positions_curr_:   %s", vec_to_str(joint_positions_curr_).c_str());
-  RCLCPP_INFO(get_node()->get_logger(), "joint_torques_command:   %s", vec_to_str(joint_torques_command).c_str());
 
   return controller_interface::return_type::OK;
 }
