@@ -11,6 +11,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
+from example_interfaces.msg import String
 
 from controller_manager_msgs.srv import SwitchController
 
@@ -219,6 +220,9 @@ class BagRecorderManager(Node):
             BeeButtonPress, "button_press", self.handle_button_press, qos_profile=qos_profile_system_default
         )
 
+        # Create publishers
+        self.action_log_publisher = self.create_publisher(String, "/action_log", qos_profile=qos_profile_system_default)
+
     @property
     def state(self) -> BagRecorderManagerState:
         """Get the current state."""
@@ -229,6 +233,7 @@ class BagRecorderManager(Node):
         """Set a new state. This will also change the interaction button color depending on the new state."""
         self._state = new_state
         self.set_button_color_from_state(self._state)
+        self.action_log_publisher.publish(String(data=f"Changed to state: {self._state}"))
         self.get_logger().info(f"Changed to state: {self._state}")
 
     @property
@@ -256,6 +261,7 @@ class BagRecorderManager(Node):
         self.set_parameters(
             [rclpy.parameter.Parameter(self.curr_task_nr_param.name, self.curr_task_nr_param.type_, new_nr)]
         )
+        self.action_log_publisher.publish(String(data=f"Set current task to {self.curr_task_nr}"))
         self.get_logger().info(f"Set current task to {self.curr_task_nr}")
 
     @property
@@ -364,6 +370,8 @@ class BagRecorderManager(Node):
 
         This will trigger state transitions based on the press type and current state.
         """
+        self.action_log_publisher.publish(String(data=f"Received button press: {msg.press_type}"))
+
         # Define which specific button press types are handled in specific states
         if self.state == BagRecorderManagerState.IDLE:
             if msg.press_type == BeeButtonPress.LONG_PRESS:
