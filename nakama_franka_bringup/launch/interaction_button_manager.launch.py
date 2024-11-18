@@ -88,7 +88,7 @@ def generate_launch_description():  # noqa: ANN201, D103
             ),
             DeclareLaunchArgument(
                 load_gripper_parameter_name,
-                default_value="false",
+                default_value="true",
                 description="Use Franka Gripper as an end-effector, otherwise, the robot is loaded "
                 "without an end-effector.",
             ),
