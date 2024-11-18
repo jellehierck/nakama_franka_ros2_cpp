@@ -346,7 +346,7 @@ class BagRecorderManager(Node):
                 return
 
             elif msg.press_type == BeeButtonPress.LONG_PRESS:  # noqa: RET505
-                self.start_training()
+                self.start_operating()
                 return
 
             elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
@@ -715,7 +715,7 @@ class BagRecorderManager(Node):
         self.curr_task_nr += 1
 
         # All is OK, we can now move back into the operating state
-        self.start_operating()
+        self.state = BagRecorderManagerState.OPERATING_IDLE
 
 
 def main(args: list[str] | None = None) -> None:
