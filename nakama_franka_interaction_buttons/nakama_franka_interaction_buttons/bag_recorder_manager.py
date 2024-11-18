@@ -104,14 +104,6 @@ class BagRecorderManager(Node):
                 read_only=True,  # Only takes effect when the node is started
             ),
         )
-        self.training_controller_param = self.declare_parameter(
-            name="training_controller",
-            value="franka_gravity_compensation_example_controller",
-            descriptor=ParameterDescriptor(
-                description="Name of the compliant controller used for training and recording tasks",
-                read_only=True,  # Only takes effect when the node is started
-            ),
-        )
         self.homing_controller_param = self.declare_parameter(
             name="homing_controller",
             value="franka_move_to_start_example_controller",
@@ -235,10 +227,6 @@ class BagRecorderManager(Node):
         self.set_button_color_from_state(self._state)
         self.action_log_publisher.publish(String(data=f"Changed to state: {self._state}"))
         self.get_logger().info(f"Changed to state: {self._state}")
-
-    @property
-    def training_controller(self) -> str:
-        return self.get_parameter(self.training_controller_param.name).get_parameter_value().string_value
 
     @property
     def playback_controller(self) -> str:
@@ -448,42 +436,27 @@ class BagRecorderManager(Node):
         """Enter the `STARTING_TRAINING` transition state.
 
         Possible next states:
-        - `SwitchController` response indicated success: `TRAINING_IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
+        - Always transitions to `TRAINING_IDLE`
         """
         self.state = BagRecorderManagerState.STARTING_TRAINING
 
-        response = self.switch_controllers_sync_and_wait(activate_controllers=[self.training_controller])
+        # Always moves into TRAINING_IDLE immediately
+        self.state = BagRecorderManagerState.TRAINING_IDLE
 
-        if response is None or not response.ok:
-            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
-            self.state = BagRecorderManagerState.ERROR
-
-        else:
-            self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def stop_training(self) -> None:
         """Enter the `STOPPING_TRAINING` transition state.
 
         Possible next states:
-        - `SwitchController` response indicated success: `IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
+        - Always transitions to `IDLE`
         """
         self.state = BagRecorderManagerState.STOPPING_TRAINING
 
-        response = self.switch_controllers_sync_and_wait(
-            deactivate_controllers=[self.training_controller],
-        )
+        # Reset the current task number to zero as we might want to play back or record from the beginning
+        self.curr_task_nr = 0
 
-        if response is None or not response.ok:
-            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
-            self.state = BagRecorderManagerState.ERROR
-
-        else:
-            # Reset the current task number to zero as we might want to play back or record from the beginning
-            self.curr_task_nr = 0
-
-            self.state = BagRecorderManagerState.IDLE
+        # Always move into IDLE immediately
+        self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state.
@@ -613,11 +586,10 @@ class BagRecorderManager(Node):
         - Homing is finished and successful: `TRAINING_IDLE`
         - Any error occurred: `ERROR`
         """
-        # Switch the homing controller in and the gravity compensation controller (from TRAINING state) out
+        # Switch the homing controller in
         self.state = BagRecorderManagerState.STARTING_TRAINING_HOMING
         activate_homing_controller_response = self.switch_controllers_sync_and_wait(
             activate_controllers=[self.homing_controller],
-            deactivate_controllers=[self.training_controller],
         )
 
         # If an error occurred, go into the error state and return early
@@ -651,11 +623,10 @@ class BagRecorderManager(Node):
             done_callback=None,  # We do not wait for a response
         )
 
-        # Switch the homing controller out and the gravity compensation controller in
+        # Switch the homing controller out
         self.state = BagRecorderManagerState.STOPPING_TRAINING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
             deactivate_controllers=[self.homing_controller],
-            activate_controllers=[self.training_controller],
         )
 
         # If an error occurred, go into the error state and return early
