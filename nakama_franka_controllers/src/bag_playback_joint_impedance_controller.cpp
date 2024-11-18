@@ -1,11 +1,13 @@
 #include "nakama_franka_ros2_controllers/bag_playback_joint_impedance_controller.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <exception>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -56,6 +58,7 @@ controller_interface::CallbackReturn nakama_franka_controllers::BagPlaybackJoint
     auto_declare<std::vector<double>>("d_gains", {});
     auto_declare<std::string>("bag_uri", "");
     auto_declare<std::string>("bag_topic", DEFAULT_RECORD_TOPIC);
+    auto_declare<bool>("process_finished", false);
   } catch (const std::exception &e) {
     (void)fprintf(stderr, "Exception thrown during init stage with message: %s \n", e.what());
     return CallbackReturn::ERROR;
@@ -123,7 +126,6 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_cleanup(const
 controller_interface::CallbackReturn
 nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(const rclcpp_lifecycle::State
                                                                               & /*previous_state*/) {
-
   // Get the bag uri parameter and create bag reader object
   auto bag_storage_options = rosbag2_storage::StorageOptions();
   bag_storage_options.uri = get_node()->get_parameter("bag_uri").as_string();
@@ -157,8 +159,11 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::on_activate(cons
   // Initialize controller variables
   update_joint_states();
   joint_velocities_curr_filtered_.setZero();
-  joint_positions_init_ = joint_positions_curr_;
   elapsed_sec_ = 0.0;
+
+  // Indicate that reading is started
+  is_reading_.store(true);
+  this->get_node()->set_parameter({"process_finished", false});
 
   return CallbackReturn::SUCCESS;
 }
@@ -212,7 +217,24 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
 
       // Store the joint positions in the bag message as desired joint positions
       for (size_t i = 0; i < N_JOINTS; i++) {
-        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->position.at(i);
+        // The joint names are likely out of order in the stored message. Therefore, we need to find the index of each
+        // joint name to get the correct value
+
+        // The following lambda will allow us to find the correct joint name (joint names are numbered 1-7)
+        const std::string expected_joint_name = "fr3_joint" + std::to_string(i + 1);
+        auto              is_joint_name = [expected_joint_name](std::string msg_joint_name) -> bool {
+          return msg_joint_name == expected_joint_name;
+        };
+
+        // Find the iterator for the joint name in the received message
+        auto found_name_iterator =
+          std::find_if(deserialized_msg->name.begin(), deserialized_msg->name.end(), is_joint_name);
+
+        // Determine the index of the found joint name
+        long int found_name_index = std::distance(deserialized_msg->name.begin(), found_name_iterator);
+
+        // Use the obtained index to find the corresponding joint position
+        joint_positions_desired(static_cast<int>(i)) = deserialized_msg->position.at(found_name_index);
       }
 
       // We have found the next desired joint position, stop the loop
@@ -220,12 +242,7 @@ nakama_franka_controllers::BagPlaybackJointImpedanceController::read_next_desire
     }
   }
 
-  // If we reached the end of the bag without finding a message, return an empty object to indicate failure
-  // TODO: This will probably happen when all messages are read, need to handle that case
-  RCLCPP_ERROR(
-    get_node()->get_logger(), "Could not find any more messages with topic %s inside the bag ",
-    bag_joint_state_topic_.c_str()
-  );
+  // We reached the end of the bag without finding a message. This is probably because all messages are read
   return std::nullopt;
 }
 
@@ -235,16 +252,38 @@ controller_interface::return_type nakama_franka_controllers::BagPlaybackJointImp
   // Get the joint positions and velocities
   update_joint_states();
 
+  // If not currently reading, we simply send zero torques and exit early
+  if (!is_reading_.load(std::memory_order_relaxed)) {
+    for (size_t i = 0; i < N_JOINTS; i++) {
+      command_interfaces_[i].set_value(0.0);
+      return controller_interface::return_type::OK;
+    }
+  }
+
   // Read the next comand from the bag
   auto joint_positions_desired_optional = read_next_desired_joint_positions_from_bag();
 
   // Check if a command was obtained from the bag
   if (!joint_positions_desired_optional.has_value()) {
-    // No command was obtained, stop the controller
-    // TODO: Stop the controller gracefully if the last message in the bag is read, instead of spamming errors
-    RCLCPP_ERROR(get_node()->get_logger(), "Could not read next command from the bag");
-    return controller_interface::return_type::ERROR;
+    // No command was obtained, stop the reading new commands
+    // TODO: The reason for no command could also be an error, but we do not propagate that error
+
+    // Set the flags which indicate whether the reading is done
+    is_reading_.store(false);
+    this->get_node()->set_parameter({"process_finished", true});
+
+    // Send zero torques command
+    for (size_t i = 0; i < N_JOINTS; i++) {
+      command_interfaces_[i].set_value(0.0);
+      return controller_interface::return_type::OK;
+    }
+
+    RCLCPP_INFO(get_node()->get_logger(), "Last command is read, the controller is done reading");
+
+    return controller_interface::return_type::OK;
   }
+
+  // If a value was obtaind from the bad, obtain it and calculate the torque command
   auto joint_positions_desired = joint_positions_desired_optional.value();
 
   // Filter the joint velocities

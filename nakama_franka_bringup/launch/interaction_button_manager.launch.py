@@ -1,9 +1,42 @@
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from datetime import datetime
+
+from launch import LaunchContext, LaunchDescription, LaunchDescriptionEntity
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition 
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def start_session_logger(
+    context: LaunchContext,
+    participant_nr_launch_configuration: LaunchConfiguration,
+    record_session_launch_configuration: LaunchConfiguration,
+) -> list[LaunchDescriptionEntity] | None:
+    """Start the session logger.
+
+    This is moved to an OpaqueFunction to be able to perform the substitutions and create formatted strings with that
+    information.
+    """
+    participant_nr = int(context.perform_substitution(participant_nr_launch_configuration))
+
+    return [
+        ExecuteProcess(
+            cmd=[
+                "ros2",
+                "bag",
+                "record",
+                # Topics to record
+                "action_log",
+                # Output file
+                "--output",
+                f"/home/fr3/nakama_ws/bags/hmi/participant_{participant_nr:03}/session_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}",
+            ],
+            output="screen",
+            condition=IfCondition(record_session_launch_configuration)
+        )
+    ]
 
 
 def generate_launch_description():  # noqa: ANN201, D103
@@ -20,6 +53,10 @@ def generate_launch_description():  # noqa: ANN201, D103
     use_fake_hardware = LaunchConfiguration(use_fake_hardware_parameter_name)
     fake_sensor_commands = LaunchConfiguration(fake_sensor_commands_parameter_name)
     use_rviz = LaunchConfiguration(use_rviz_parameter_name)
+
+    # HMI experiment launch arguments
+    participant_nr_parameter_name = "participant_nr"
+    record_session_parameter_name = "record_session"
 
     return LaunchDescription(
         [
@@ -54,6 +91,16 @@ def generate_launch_description():  # noqa: ANN201, D103
                 default_value="false",
                 description="Use Franka Gripper as an end-effector, otherwise, the robot is loaded "
                 "without an end-effector.",
+            ),
+            # HMI experiment launch arguments
+            DeclareLaunchArgument(
+                participant_nr_parameter_name,
+                description="Which participant number to use.",
+            ),
+            DeclareLaunchArgument(
+                record_session_parameter_name,
+                default_value="true",
+                description="Whether to record the session's action logs into a rosbag",
             ),
             # Franka bringup
             IncludeLaunchDescription(
@@ -143,16 +190,27 @@ def generate_launch_description():  # noqa: ANN201, D103
                 executable="bee_buttons",
                 parameters=[
                     {"update_rate": 50.0},
+                    {"battery_info_on_startup": False},
                 ],
+                # Limit log level so not all messages are shown
+                arguments=["--ros-args", "--log-level", "WARN"],
             ),
             # Bag recorder manager node
             Node(
                 package="nakama_franka_interaction_buttons",
                 executable="bag_recorder_manager",
                 parameters=[
-                    {"recorder_controller": "nakama_bag_recorder_controller"},
-                    {"wait_for_services": False},
+                    {"wait_for_services": True},
+                    {"participant_nr": LaunchConfiguration(participant_nr_parameter_name)},
+                    {"training_controller": "franka_gravity_compensation_example_controller"},
+                    {"playback_controller": "nakama_bag_playback_joint_impedance_controller"},
+                    {"homing_controller": "franka_move_to_start_example_controller"},
                 ],
+            ),
+            # Action recording bag recorder
+            OpaqueFunction(
+                function=start_session_logger,
+                args=[LaunchConfiguration(participant_nr_parameter_name), LaunchConfiguration(record_session_parameter_name)],
             ),
         ]
     )

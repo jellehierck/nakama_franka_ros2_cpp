@@ -9,6 +9,7 @@
 
   <!-- ROS built-in dependencies -->
   <exec_depend>rclpy</exec_depend>
+  <depend>example_interfaces</depend>
 
   <!-- Third-party ROS dependencies -->
   <depend>controller_manager_msgs</depend>

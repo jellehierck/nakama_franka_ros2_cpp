@@ -1,7 +1,9 @@
 from enum import auto
+from pathlib import Path
 import time
 
 import rclpy
+import rclpy.parameter
 from builtin_interfaces.msg import Duration
 from rcl_interfaces.msg import Parameter, ParameterDescriptor, ParameterType, ParameterValue
 from rcl_interfaces.srv import SetParameters, GetParameters
@@ -9,6 +11,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
+from example_interfaces.msg import String
 
 from controller_manager_msgs.srv import SwitchController
 
@@ -67,12 +70,32 @@ class BagRecorderManager(Node):
         self._state = BagRecorderManagerState.IDLE
 
         # Store the recorded bag URIs during the training phase
-        self.recorded_bag_uris: list[str] = []
+        # self.recorded_bag_uris: list[str] = []
 
-        # Keep track of how many recordings were played back
-        self.nr_recordings_played_back = 0
+        # Declare parameters for keeping track of participants and tasks
+        self.base_bag_path_param = self.declare_parameter(
+            name="base_bag_path",
+            value="/home/fr3/nakama_ws/bags/hmi/",
+            descriptor=ParameterDescriptor(
+                description="Full path to the base of where the recorded bags are stored",
+            ),
+        )
+        self.participant_nr_param = self.declare_parameter(
+            name="participant_nr",
+            value=1,
+            descriptor=ParameterDescriptor(
+                description="Participant number",
+            ),
+        )
+        self.curr_task_nr_param = self.declare_parameter(
+            name="curr_task_nr",
+            value=0,
+            descriptor=ParameterDescriptor(
+                description="Current task number, used to select a recording and playback bag",
+            ),
+        )
 
-        # Declare parameters
+        # Declare parameters for used controller names
         self.playback_controller_param = self.declare_parameter(
             name="playback_controller",
             value="nakama_bag_playback_joint_impedance_controller",
@@ -98,6 +121,7 @@ class BagRecorderManager(Node):
             ),
         )
 
+        # Declare other parameters
         self.wait_for_services_param = self.declare_parameter(
             name="wait_for_services",
             value=True,
@@ -114,31 +138,43 @@ class BagRecorderManager(Node):
         # Create service clients to be able to make service requests
         def wait_for_service(client_wrapper: AsyncClientWrapper) -> None:
             """Helper function to wait on the service to become availabe if `wait_for_services` parameter is True."""
-            if self.wait_for_services_param.get_parameter_value().bool_value:
+            if self.get_parameter(self.wait_for_services_param.name).get_parameter_value().bool_value:
                 # Wait for some seconds before logging a new message that the service is unavailable
                 while not client_wrapper.client.wait_for_service(timeout_sec=2.0):
                     self.get_logger().info(f"Service {client_wrapper.client.srv_name} not available, waiting...")
 
-        # Set parameter service
+        # Relevant parameter services
+        self.get_playback_controller_parameters_service = AsyncClientWrapper(
+            self.create_client(
+                GetParameters,
+                srv_name=f"{self.playback_controller}/get_parameters",
+                callback_group=self.async_service_callback_group,
+            )
+        )
+
         self.set_playback_controller_parameters_service = AsyncClientWrapper(
             self.create_client(
                 SetParameters,
-                # TODO: Remove the hardcoded controller name
-                srv_name=f"{self.playback_controller_param.get_parameter_value().string_value}/set_parameters",
+                srv_name=f"{self.playback_controller}/set_parameters",
                 callback_group=self.async_service_callback_group,
             )
         )
-        # We do not wait for the set_playback_controller_parameters_service
 
-        self.get_move_to_start_controller_parameters_service = AsyncClientWrapper(
+        self.get_homing_controller_parameters_service = AsyncClientWrapper(
             self.create_client(
                 GetParameters,
-                # TODO: Remove the hardcoded controller name
-                srv_name=f"{self.homing_controller_param.get_parameter_value().string_value}/get_parameters",
+                srv_name=f"{self.homing_controller}/get_parameters",
                 callback_group=self.async_service_callback_group,
             )
         )
-        # We do not wait for the get_move_to_start_controller_parameters_service
+
+        self.set_homing_controller_parameters_service = AsyncClientWrapper(
+            self.create_client(
+                SetParameters,
+                srv_name=f"{self.homing_controller}/set_parameters",
+                callback_group=self.async_service_callback_group,
+            )
+        )
 
         # Controller manager services
         self.switch_controller_service = AsyncClientWrapper(
@@ -184,6 +220,9 @@ class BagRecorderManager(Node):
             BeeButtonPress, "button_press", self.handle_button_press, qos_profile=qos_profile_system_default
         )
 
+        # Create publishers
+        self.action_log_publisher = self.create_publisher(String, "/action_log", qos_profile=qos_profile_system_default)
+
     @property
     def state(self) -> BagRecorderManagerState:
         """Get the current state."""
@@ -194,7 +233,43 @@ class BagRecorderManager(Node):
         """Set a new state. This will also change the interaction button color depending on the new state."""
         self._state = new_state
         self.set_button_color_from_state(self._state)
+        self.action_log_publisher.publish(String(data=f"Changed to state: {self._state}"))
         self.get_logger().info(f"Changed to state: {self._state}")
+
+    @property
+    def training_controller(self) -> str:
+        return self.get_parameter(self.training_controller_param.name).get_parameter_value().string_value
+
+    @property
+    def playback_controller(self) -> str:
+        return self.get_parameter(self.playback_controller_param.name).get_parameter_value().string_value
+
+    @property
+    def homing_controller(self) -> str:
+        return self.get_parameter(self.homing_controller_param.name).get_parameter_value().string_value
+
+    @property
+    def participant_nr(self) -> int:
+        return self.get_parameter(self.participant_nr_param.name).get_parameter_value().integer_value
+
+    @property
+    def curr_task_nr(self) -> int:
+        return self.get_parameter(self.curr_task_nr_param.name).get_parameter_value().integer_value
+
+    @curr_task_nr.setter
+    def curr_task_nr(self, new_nr: int) -> None:
+        self.set_parameters(
+            [rclpy.parameter.Parameter(self.curr_task_nr_param.name, self.curr_task_nr_param.type_, new_nr)]
+        )
+        self.action_log_publisher.publish(String(data=f"Set current task to {self.curr_task_nr}"))
+        self.get_logger().info(f"Set current task to {self.curr_task_nr}")
+
+    @property
+    def base_bag_path(self) -> str:
+        return self.get_parameter(self.base_bag_path_param.name).get_parameter_value().string_value
+
+    def curr_participant_task_to_bag_name(self) -> str:
+        return f"participant_{self.participant_nr:03}/task_{self.curr_task_nr:03}"
 
     def set_button_color_from_state(self, state: BagRecorderManagerState) -> None:
         """Send a button color effect request based on a state."""
@@ -295,6 +370,8 @@ class BagRecorderManager(Node):
 
         This will trigger state transitions based on the press type and current state.
         """
+        self.action_log_publisher.publish(String(data=f"Received button press: {msg.press_type}"))
+
         # Define which specific button press types are handled in specific states
         if self.state == BagRecorderManagerState.IDLE:
             if msg.press_type == BeeButtonPress.LONG_PRESS:
@@ -338,12 +415,6 @@ class BagRecorderManager(Node):
                 self.start_operating_homing()
                 return
 
-        elif self.state == BagRecorderManagerState.REPLAYING:  # noqa: SIM102
-            # TODO: Replace this with an automatic detection of playback finished
-            if msg.press_type == BeeButtonPress.PRESSED:
-                self.stop_replaying()
-                return
-
         # The current combination of state and button press type has no effect
         self.get_logger().warn(f"Button press type {msg.press_type} has no effect in state {self._state}")
 
@@ -363,14 +434,15 @@ class BagRecorderManager(Node):
         if deactivate_controllers is None:
             deactivate_controllers = []
 
-        request = SwitchController.Request(
-            activate_controllers=activate_controllers,
-            deactivate_controllers=deactivate_controllers,
-            strictness=SwitchController.Request.STRICT,
-            activate_asap=True,
-            timeout=Duration(sec=1),
+        return self.switch_controller_service.call_sync_and_await(
+            SwitchController.Request(
+                activate_controllers=activate_controllers,
+                deactivate_controllers=deactivate_controllers,
+                strictness=SwitchController.Request.STRICT,
+                activate_asap=True,
+                timeout=Duration(sec=1),
+            )
         )
-        return self.switch_controller_service.call_sync_and_await(request)
 
     def start_training(self) -> None:
         """Enter the `STARTING_TRAINING` transition state.
@@ -381,9 +453,7 @@ class BagRecorderManager(Node):
         """
         self.state = BagRecorderManagerState.STARTING_TRAINING
 
-        response = self.switch_controllers_sync_and_wait(
-            activate_controllers=[self.training_controller_param.get_parameter_value().string_value]
-        )
+        response = self.switch_controllers_sync_and_wait(activate_controllers=[self.training_controller])
 
         if response is None or not response.ok:
             self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.TRAINING_IDLE}")
@@ -402,7 +472,7 @@ class BagRecorderManager(Node):
         self.state = BagRecorderManagerState.STOPPING_TRAINING
 
         response = self.switch_controllers_sync_and_wait(
-            deactivate_controllers=[self.training_controller_param.get_parameter_value().string_value],
+            deactivate_controllers=[self.training_controller],
         )
 
         if response is None or not response.ok:
@@ -410,6 +480,9 @@ class BagRecorderManager(Node):
             self.state = BagRecorderManagerState.ERROR
 
         else:
+            # Reset the current task number to zero as we might want to play back or record from the beginning
+            self.curr_task_nr = 0
+
             self.state = BagRecorderManagerState.IDLE
 
     def start_recording(self) -> None:
@@ -418,16 +491,24 @@ class BagRecorderManager(Node):
         Possible next states:
         - `StartBagRecording` response indicated success: `RECORDING`
         - `StartBagRecording` response indicated failure: `ERROR`
+        - A bag already exists for this task and participant: `TRAINING_IDLE`
         """
         self.state = BagRecorderManagerState.STARTING_RECORDING
-        request = StartBagRecording.Request(
-            # TODO: Create better bag path and name, perhaps based on participant etc
-            bag_path="bags/recordings/",
-            bag_name=f"recording_{len(self.recorded_bag_uris):03}",
-            append_timestamp=False,
-        )
 
-        response: StartBagRecording.Response | None = self.start_recording_service.call_sync_and_await(request)
+        # First check if the path already exists
+        full_bag_path = Path(self.base_bag_path + self.curr_participant_task_to_bag_name())
+        if full_bag_path.exists():
+            self.get_logger().warn(f"Cannot start recording as task bag already exists ({full_bag_path})")
+            self.state = BagRecorderManagerState.TRAINING_IDLE
+            return
+
+        response: StartBagRecording.Response | None = self.start_recording_service.call_sync_and_await(
+            StartBagRecording.Request(
+                bag_path=self.base_bag_path,
+                bag_name=self.curr_participant_task_to_bag_name(),
+                append_timestamp=False,
+            )
+        )
 
         if response is None or not response.started:
             self.get_logger().error("Could not start recording")
@@ -435,7 +516,8 @@ class BagRecorderManager(Node):
 
         else:
             # Store the recorded bag URI in the list of trainings
-            self.recorded_bag_uris.append(response.opened_bag_uri)
+            # TODO: Remove this if not needed anymore
+            # self.recorded_bag_uris.append(response.opened_bag_uri)
             self.state = BagRecorderManagerState.RECORDING
 
     def stop_recording(self) -> None:
@@ -446,19 +528,25 @@ class BagRecorderManager(Node):
         - `StopBagRecording` response indicated failure: `ERROR`
         """
         self.state = BagRecorderManagerState.STOPPING_RECORDING
-        request = StopBagRecording.Request()
 
-        response: StopBagRecording.Response | None = self.stop_recording_service.call_sync_and_await(request)
+        response: StopBagRecording.Response | None = self.stop_recording_service.call_sync_and_await(
+            StopBagRecording.Request()
+        )
 
         if response is None:
             self.get_logger().error("Could not stop recording")
             self.state = BagRecorderManagerState.ERROR
 
         else:
+            # Increment the current task number to keep track of how many tasks are recorded
+            self.curr_task_nr += 1
             self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def start_operating_homing(self) -> None:
-        """Enter the `STARTING_OPERATING_HOMING` transition state.
+        """Enter the `OPERATING_HOMING` timed state.
+
+        This will move through the `STARTING_OPERATING_HOMING`, `OPERATING_HOMING` and `STOPPING_OPERATING_HOMING`
+        states.
 
         Possible next states:
         - Homing is finished and successful: `OPERATING_IDLE`
@@ -467,7 +555,7 @@ class BagRecorderManager(Node):
         # Activate the homing controller
         self.state = BagRecorderManagerState.STARTING_OPERATING_HOMING
         activate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            activate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
+            activate_controllers=[self.homing_controller],
         )
 
         # If an error occurred, go into the error state and return early
@@ -478,15 +566,33 @@ class BagRecorderManager(Node):
 
         # Wait for the homing to finish
         self.state = BagRecorderManagerState.OPERATING_HOMING
-        homing_success = self.wait_for_homing_finished()
-        if not homing_success:
+        process_finished = self.wait_for_controller_process_finished(self.get_homing_controller_parameters_service)
+        if not process_finished:
             self.get_logger().error("Error during homing: homing was not successful")
             self.state = BagRecorderManagerState.ERROR
 
-        # Deactivate the homing controller
+        # Create a service request to reset the process finished flag
+        # TODO: This is currently a bug in `franka_example_controllers/MoveToStartExampleController`, where parameter
+        # `"process_finished"` is not reset when the controller is reactivated
+        self.set_homing_controller_parameters_service.call_async(
+            SetParameters.Request(
+                parameters=[
+                    Parameter(
+                        name="process_finished",
+                        value=ParameterValue(
+                            type=ParameterType.PARAMETER_BOOL,
+                            bool_value=False,
+                        ),
+                    )
+                ]
+            ),
+            done_callback=None,  # We do not wait for a response
+        )
+
+        # Deactivate the homing controller and activate the training controller
         self.state = BagRecorderManagerState.STOPPING_OPERATING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            deactivate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
+            deactivate_controllers=[self.homing_controller],
         )
 
         # If an error occurred, go into the error state and return early
@@ -496,10 +602,12 @@ class BagRecorderManager(Node):
             return
 
         # All is OK, we can now move back into the operating state
-        self.start_operating()
+        self.state = BagRecorderManagerState.OPERATING_IDLE
 
     def start_training_homing(self) -> None:
-        """Enter the `STARTING_TRAINING_HOMING` transition state.
+        """Enter the `TRAINING_HOMING` timed state.
+
+        This will move through the `STARTING_TRAINING_HOMING`, `TRAINING_HOMING` and `STOPPING_TRAINING_HOMING` states.
 
         Possible next states:
         - Homing is finished and successful: `TRAINING_IDLE`
@@ -508,8 +616,8 @@ class BagRecorderManager(Node):
         # Switch the homing controller in and the gravity compensation controller (from TRAINING state) out
         self.state = BagRecorderManagerState.STARTING_TRAINING_HOMING
         activate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            activate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
-            deactivate_controllers=[self.training_controller_param.get_parameter_value().string_value],
+            activate_controllers=[self.homing_controller],
+            deactivate_controllers=[self.training_controller],
         )
 
         # If an error occurred, go into the error state and return early
@@ -520,16 +628,34 @@ class BagRecorderManager(Node):
 
         # Wait for the homing to finish
         self.state = BagRecorderManagerState.TRAINING_HOMING
-        homing_success = self.wait_for_homing_finished()
-        if not homing_success:
+        process_finished = self.wait_for_controller_process_finished(self.get_homing_controller_parameters_service)
+        if not process_finished:
             self.get_logger().error("Error during homing: homing was not successful")
             self.state = BagRecorderManagerState.ERROR
 
-        # Only deactivate the homing controller: the gravity compensation controller is reactivated later in the
-        # `start_training()` method
+        # Create a service request to reset the process finished flag
+        # TODO: This is currently a bug in `franka_example_controllers/MoveToStartExampleController`, where parameter
+        # `"process_finished"` is not reset when the controller is reactivated
+        self.set_homing_controller_parameters_service.call_async(
+            SetParameters.Request(
+                parameters=[
+                    Parameter(
+                        name="process_finished",
+                        value=ParameterValue(
+                            type=ParameterType.PARAMETER_BOOL,
+                            bool_value=False,
+                        ),
+                    )
+                ]
+            ),
+            done_callback=None,  # We do not wait for a response
+        )
+
+        # Switch the homing controller out and the gravity compensation controller in
         self.state = BagRecorderManagerState.STOPPING_TRAINING_HOMING
         deactivate_homing_controller_response = self.switch_controllers_sync_and_wait(
-            deactivate_controllers=[self.homing_controller_param.get_parameter_value().string_value],
+            deactivate_controllers=[self.homing_controller],
+            activate_controllers=[self.training_controller],
         )
 
         # If an error occurred, go into the error state and return early
@@ -539,30 +665,31 @@ class BagRecorderManager(Node):
             return
 
         # All is OK, we can now move back into the training state
-        self.start_training()
+        self.state = BagRecorderManagerState.TRAINING_IDLE
 
-    def wait_for_homing_finished(self) -> bool:
-        """Wait for the homing controller to finish.
+    @staticmethod
+    def wait_for_controller_process_finished(get_controller_parameters_service: AsyncClientWrapper) -> bool:
+        """Wait for a controller to set its `"process_finished"` parameter.
 
-        :return: `True` if the homing is completed successfully.
+        :param get_controller_parameters_service: The `GetParameters` service to use to make the parameter request.
+        :return: `True` if the homing is finished.
         :return: `False` if an error occurred.
         """
         # Check whether the homing process is finished by polling the parameter flag on the move to start controller
         while True:
-            homing_finished_request = GetParameters.Request(
-                names=["process_finished"],
-            )
             homing_finished_response: GetParameters.Response | None = (
-                self.get_move_to_start_controller_parameters_service.call_sync_and_await(homing_finished_request)
+                get_controller_parameters_service.call_sync_and_await(
+                    GetParameters.Request(
+                        names=["process_finished"],
+                    )
+                )
             )
-            # CHeck if the response is OK
+            # Check if the response is OK
             if (
                 homing_finished_response is None
                 or not homing_finished_response.values
                 or homing_finished_response.values[0].type != ParameterType.PARAMETER_BOOL
             ):
-                self.get_logger().error("Checking if homing is finished gave a malformed response.")
-                self.state = BagRecorderManagerState.ERROR
                 return False  # Indicate failure
 
             # Check if the response indicated that the controller is finished
@@ -589,41 +716,56 @@ class BagRecorderManager(Node):
         - Always transitions to: `IDLE`
         """
         self.state = BagRecorderManagerState.STOPPING_OPERATING
+
+        # Reset the current task number to zero as we might want to play back or record from the beginning
+        self.curr_task_nr = 0
+
         # Transition to the next state immediately
         self.state = BagRecorderManagerState.IDLE
 
     def start_replaying(self) -> None:
-        """Enter the `STARTING_REPLAYING` transition state.
+        """Enter the `REPLAYING` timed state.
+
+        This will move through the `STARTING_REPLAYING`, `REPLAYING` and `STOPPING_REPLAYING` states.
 
         Possible next states:
-        - `SwitchController` response indicated success: `REPLAYING`
-        - `SwitchController` response indicated failure, or the bag URI was not set on the playback controller: `ERROR`
+        - Playback is finished and successful: `OPERATING_IDLE`
+        - Any error occurred: `ERROR`
+        - A bag does not exist for this task and participant: `OPERATING_IDLE`
         """
         self.state = BagRecorderManagerState.STARTING_REPLAYING
 
         # Check if we can play back the next recording
-        # TODO: Make a better way to influence which recording is selected
-        if self.nr_recordings_played_back >= len(self.recorded_bag_uris):
-            self.get_logger().error("There is no new recording to play back!")
-            self.state = BagRecorderManagerState.ERROR
+        # TODO: Remove this if not needed anymore
+        # if self.nr_recordings_played_back >= len(self.recorded_bag_uris):
+        #     self.get_logger().error("There is no new recording to play back!")
+        #     self.state = BagRecorderManagerState.ERROR
+        #     return
+
+        # First check if the path already exists
+        full_bag_path = Path(self.base_bag_path + self.curr_participant_task_to_bag_name())
+        if not full_bag_path.exists():
+            self.get_logger().warn(f"Cannot start playback as task bag does not exist ({full_bag_path})")
+            self.state = BagRecorderManagerState.OPERATING_IDLE
             return
 
         # Create a service request to change the used bag URI for the playback controller before the controller starts
-        bag_uri_parameter_request = SetParameters.Request(
-            parameters=[
-                Parameter(
-                    name="bag_uri",
-                    value=ParameterValue(
-                        type=ParameterType.PARAMETER_STRING,
-                        # TODO: Make a better way to influence which recording is selected
-                        string_value=self.recorded_bag_uris[self.nr_recordings_played_back],
-                    ),
-                )
-            ]
-        )
-
         bag_uri_response: SetParameters.Response | None = (
-            self.set_playback_controller_parameters_service.call_sync_and_await(bag_uri_parameter_request)
+            self.set_playback_controller_parameters_service.call_sync_and_await(
+                SetParameters.Request(
+                    parameters=[
+                        Parameter(
+                            name="bag_uri",
+                            value=ParameterValue(
+                                type=ParameterType.PARAMETER_STRING,
+                                # TODO: Remove this if not needed anymore
+                                # string_value=self.recorded_bag_uris[self.nr_recordings_played_back],
+                                string_value=self.base_bag_path + self.curr_participant_task_to_bag_name(),
+                            ),
+                        )
+                    ]
+                )
+            )
         )
 
         # Check that the new bag URI is set successfully
@@ -633,42 +775,40 @@ class BagRecorderManager(Node):
             return
 
         # Now we can activate the playback controller
-        request = SwitchController.Request(
-            activate_controllers=[self.playback_controller_param.get_parameter_value().string_value],
-            deactivate_controllers=[],
-            strictness=SwitchController.Request.STRICT,
-            activate_asap=True,
-            timeout=Duration(sec=1),
+        activate_playback_controller_response: SwitchController.Response | None = self.switch_controllers_sync_and_wait(
+            activate_controllers=[self.playback_controller],
         )
-        response: SwitchController.Response | None = self.switch_controller_service.call_sync_and_await(request)
 
-        if response is None or not response.ok:
-            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.REPLAYING}")
+        # If an error occurred, go into the error state and return early
+        if activate_playback_controller_response is None or not activate_playback_controller_response.ok:
+            self.get_logger().error("Error during playback: could not activate playback controller")
+            self.state = BagRecorderManagerState.ERROR
+            return
+
+        # Wait for the playback to finish
+        self.state = BagRecorderManagerState.REPLAYING
+        playback_finished = self.wait_for_controller_process_finished(self.get_playback_controller_parameters_service)
+        if not playback_finished:
+            self.get_logger().error("Error during playback: playback was not successful")
             self.state = BagRecorderManagerState.ERROR
 
-        else:
-            self.state = BagRecorderManagerState.REPLAYING
-
-    def stop_replaying(self) -> None:
-        """Enter the `STOPPING_REPLAYING` transition state.
-
-        Possible next states:
-        - `SwitchController` response indicated success: `OPERATING_IDLE`
-        - `SwitchController` response indicated failure: `ERROR`
-        """
+        # Deactivate the playback controller
         self.state = BagRecorderManagerState.STOPPING_REPLAYING
-        self.nr_recordings_played_back += 1  # Update the number of recordings which are played back
-
-        response: SwitchController.Response | None = self.switch_controllers_sync_and_wait(
-            deactivate_controllers=[self.playback_controller_param.get_parameter_value().string_value],
+        deactivate_playback_controller_response = self.switch_controllers_sync_and_wait(
+            deactivate_controllers=[self.playback_controller],
         )
 
-        if response is None or not response.ok:
-            self.get_logger().error(f"Error while transitioning to state {BagRecorderManagerState.OPERATING_IDLE}")
+        # If an error occurred, go into the error state and return early
+        if deactivate_playback_controller_response is None or not deactivate_playback_controller_response.ok:
+            self.get_logger().error("Error during homing: could not deactivate homing controller")
             self.state = BagRecorderManagerState.ERROR
+            return
 
-        else:
-            self.state = BagRecorderManagerState.OPERATING_IDLE
+        # Increment the current task number to keep track of how many tasks are played back
+        self.curr_task_nr += 1
+
+        # All is OK, we can now move back into the operating state
+        self.start_operating()
 
 
 def main(args: list[str] | None = None) -> None:

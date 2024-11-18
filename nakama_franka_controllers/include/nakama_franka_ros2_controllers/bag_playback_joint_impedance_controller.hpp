@@ -1,14 +1,17 @@
 #ifndef NAKAMA_FRANKA_ROS2_CONTROLLERS_BAG_PLAYBACK_JOINT_IMPEDANCE_CONTROLLER
 #define NAKAMA_FRANKA_ROS2_CONTROLLERS_BAG_PLAYBACK_JOINT_IMPEDANCE_CONTROLLER
 
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 
 #include <Eigen/Eigen>
 #include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Core/IO.h>
 
 #include <rclcpp/duration.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -101,6 +104,13 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
    */
   std::optional<Vector7d> read_next_desired_joint_positions_from_bag();
 
+  std::string vec_to_str(Vector7d vec) {
+    std::stringstream sstream;
+    Eigen::IOFormat clean_fmt(4, 0, ", ", "\n", "[", "]");
+    sstream << vec.transpose().format(clean_fmt);
+    return sstream.str();
+  }
+
   // Tools required to read and (de)serialize messages from a bag
   std::string                             bag_joint_state_topic_;
   std::unique_ptr<rosbag2_cpp::Reader>    bag_reader_;
@@ -120,6 +130,7 @@ class BagPlaybackJointImpedanceController : public controller_interface::Control
   double motion_duration_sec_ = DEFAULT_MOTION_DURATION_SEC;
 
   rclcpp::Time start_time_;
+  std::atomic_bool is_reading_{false};
 };
 
 }  // namespace nakama_franka_controllers
