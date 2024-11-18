@@ -49,7 +49,7 @@ HMI experiment in November/December 2024 which is operated by Jelle Hierck.
       2. Operator controls safety button.
       3. Operator will notify when robot will move automatically.
       4. Everything is under operator supervision.
-   3. Let participant fill out consent form.
+   3. Let participant fill out consent form **2 times**.
 
 3. Let user get familiar with training mode (10-15 minutes):
 
