@@ -1,22 +1,22 @@
+import time
 from enum import auto
 from pathlib import Path
-import time
 
 import rclpy
 import rclpy.parameter
 from builtin_interfaces.msg import Duration
 from rcl_interfaces.msg import Parameter, ParameterDescriptor, ParameterType, ParameterValue
-from rcl_interfaces.srv import SetParameters, GetParameters
+from rcl_interfaces.srv import GetParameters, SetParameters
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_system_default
-from example_interfaces.msg import String
 
 from controller_manager_msgs.srv import SwitchController
 
 from bee_buttons_interfaces.msg import BeeButtonColor, BeeButtonPress
 from bee_buttons_interfaces.srv import BeeButtonSetColor
+from example_interfaces.msg import String
 
 from nakama_franka_interfaces.srv import StartBagRecording, StopBagRecording
 
@@ -27,7 +27,7 @@ from .strenum import StrEnum
 class BagRecorderManagerState(StrEnum):
     """Possible states for the BagRecorderManager."""
 
-    IDLE = auto()
+    # IDLE = auto()
 
     ERROR = auto()
 
@@ -65,12 +65,6 @@ class BagRecorderManager(Node):
     def __init__(self) -> None:
         """Initialize the BagRecoderManager node."""
         super().__init__("bag_recorder_manager")
-
-        # Initialize the state
-        self._state = BagRecorderManagerState.IDLE
-
-        # Store the recorded bag URIs during the training phase
-        # self.recorded_bag_uris: list[str] = []
 
         # Declare parameters for keeping track of participants and tasks
         self.base_bag_path_param = self.declare_parameter(
@@ -215,6 +209,9 @@ class BagRecorderManager(Node):
         # Create publishers
         self.action_log_publisher = self.create_publisher(String, "/action_log", qos_profile=qos_profile_system_default)
 
+        # Initialize the state
+        self.start_training()
+
     @property
     def state(self) -> BagRecorderManagerState:
         """Get the current state."""
@@ -272,17 +269,6 @@ class BagRecorderManager(Node):
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == BagRecorderManagerState.IDLE:
-            self.set_button_color_service.call_async(
-                request=BeeButtonSetColor.Request(
-                    broadcast=True,
-                    effect=BeeButtonSetColor.Request.EFFECT_FULL,
-                    color=BeeButtonColor(value=BeeButtonColor.GREEN),
-                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
-                ),
-                done_callback=None,  # We do not care about the result of setting the color
-            )
-
         elif state == BagRecorderManagerState.TRAINING_IDLE:
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
@@ -310,7 +296,7 @@ class BagRecorderManager(Node):
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
                     effect=BeeButtonSetColor.Request.EFFECT_FULL,
-                    color=BeeButtonColor(value=BeeButtonColor.YELLOW),
+                    color=BeeButtonColor(value=BeeButtonColor.GREEN),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
                 done_callback=None,  # We do not care about the result of setting the color
@@ -321,17 +307,17 @@ class BagRecorderManager(Node):
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
                     effect=BeeButtonSetColor.Request.EFFECT_BLINK,
-                    color=BeeButtonColor(value=BeeButtonColor.ORANGE),
+                    color=BeeButtonColor(value=BeeButtonColor.YELLOW),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
                 done_callback=None,  # We do not care about the result of setting the color
             )
 
-        elif state == BagRecorderManagerState.TRAINING_HOMING or state == BagRecorderManagerState.OPERATING_HOMING:
+        elif state in (BagRecorderManagerState.TRAINING_HOMING, BagRecorderManagerState.OPERATING_HOMING):
             self.set_button_color_service.call_async(
                 request=BeeButtonSetColor.Request(
                     broadcast=True,
-                    effect=BeeButtonSetColor.Request.EFFECT_BLINK,
+                    effect=BeeButtonSetColor.Request.EFFECT_CIRCLE,
                     color=BeeButtonColor(value=BeeButtonColor.PINK),
                     brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
                 ),
@@ -339,21 +325,13 @@ class BagRecorderManager(Node):
             )
 
         elif str(state).lower().startswith("starting") or str(state).lower().startswith("stopping"):
-            # All transition states will show the same color effect
-            self.set_button_color_service.call_async(
-                request=BeeButtonSetColor.Request(
-                    broadcast=True,
-                    effect=BeeButtonSetColor.Request.EFFECT_BLINK,
-                    color=BeeButtonColor(value=BeeButtonColor.CYAN),
-                    brightness=BeeButtonSetColor.Request.BRIGHTNESS_MAX,
-                ),
-                done_callback=None,  # We do not care about the result of setting the color
-            )
+            # All transition states do not show any color
+            pass
 
         else:
             self.get_logger().warn(f"Cannot set button color for state {state}")
 
-    def handle_button_press(self, msg: BeeButtonPress) -> None:
+    def handle_button_press(self, msg: BeeButtonPress) -> None:  # noqa: C901, PLR0911
         """Handle incoming button press messages.
 
         This will trigger state transitions based on the press type and current state.
@@ -361,30 +339,21 @@ class BagRecorderManager(Node):
         self.action_log_publisher.publish(String(data=f"Received button press: {msg.press_type}"))
 
         # Define which specific button press types are handled in specific states
-        if self.state == BagRecorderManagerState.IDLE:
-            if msg.press_type == BeeButtonPress.LONG_PRESS:
-                self.start_training()
-                return
-
-            if msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
-                self.start_operating()
-                return
-
         # Training states
-        elif self.state == BagRecorderManagerState.TRAINING_IDLE:
+        if self.state == BagRecorderManagerState.TRAINING_IDLE:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.start_recording()
                 return
 
             elif msg.press_type == BeeButtonPress.LONG_PRESS:  # noqa: RET505
-                self.stop_training()
+                self.start_training()
                 return
 
-            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:  # noqa: RET505
+            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
                 self.start_training_homing()
                 return
 
-        elif self.state == BagRecorderManagerState.RECORDING:  # noqa: SIM102
+        elif self.state == BagRecorderManagerState.RECORDING:
             if msg.press_type == BeeButtonPress.PRESSED:
                 self.stop_recording()
                 return
@@ -396,10 +365,10 @@ class BagRecorderManager(Node):
                 return
 
             elif msg.press_type == BeeButtonPress.LONG_PRESS:  # noqa: RET505
-                self.stop_operating()
+                self.start_training()
                 return
 
-            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:  # noqa: RET505
+            elif msg.press_type == BeeButtonPress.DOUBLE_PRESSED:
                 self.start_operating_homing()
                 return
 
@@ -440,23 +409,11 @@ class BagRecorderManager(Node):
         """
         self.state = BagRecorderManagerState.STARTING_TRAINING
 
-        # Always moves into TRAINING_IDLE immediately
-        self.state = BagRecorderManagerState.TRAINING_IDLE
-
-
-    def stop_training(self) -> None:
-        """Enter the `STOPPING_TRAINING` transition state.
-
-        Possible next states:
-        - Always transitions to `IDLE`
-        """
-        self.state = BagRecorderManagerState.STOPPING_TRAINING
-
         # Reset the current task number to zero as we might want to play back or record from the beginning
         self.curr_task_nr = 0
 
-        # Always move into IDLE immediately
-        self.state = BagRecorderManagerState.IDLE
+        # Always moves into TRAINING_IDLE immediately
+        self.state = BagRecorderManagerState.TRAINING_IDLE
 
     def start_recording(self) -> None:
         """Enter the `STARTING_RECORDING` transition state.
@@ -489,8 +446,6 @@ class BagRecorderManager(Node):
 
         else:
             # Store the recorded bag URI in the list of trainings
-            # TODO: Remove this if not needed anymore
-            # self.recorded_bag_uris.append(response.opened_bag_uri)
             self.state = BagRecorderManagerState.RECORDING
 
     def stop_recording(self) -> None:
@@ -677,22 +632,12 @@ class BagRecorderManager(Node):
         - Always transitions to: `OPERATING_IDLE`
         """
         self.state = BagRecorderManagerState.STARTING_OPERATING
-        # Transition to the next state immediately
-        self.state = BagRecorderManagerState.OPERATING_IDLE
-
-    def stop_operating(self) -> None:
-        """Enter the `STOPPING_OPERATING` transition state.
-
-        Possible next states:
-        - Always transitions to: `IDLE`
-        """
-        self.state = BagRecorderManagerState.STOPPING_OPERATING
 
         # Reset the current task number to zero as we might want to play back or record from the beginning
         self.curr_task_nr = 0
 
         # Transition to the next state immediately
-        self.state = BagRecorderManagerState.IDLE
+        self.state = BagRecorderManagerState.OPERATING_IDLE
 
     def start_replaying(self) -> None:
         """Enter the `REPLAYING` timed state.
@@ -705,13 +650,6 @@ class BagRecorderManager(Node):
         - A bag does not exist for this task and participant: `OPERATING_IDLE`
         """
         self.state = BagRecorderManagerState.STARTING_REPLAYING
-
-        # Check if we can play back the next recording
-        # TODO: Remove this if not needed anymore
-        # if self.nr_recordings_played_back >= len(self.recorded_bag_uris):
-        #     self.get_logger().error("There is no new recording to play back!")
-        #     self.state = BagRecorderManagerState.ERROR
-        #     return
 
         # First check if the path already exists
         full_bag_path = Path(self.base_bag_path + self.curr_participant_task_to_bag_name())
@@ -729,8 +667,6 @@ class BagRecorderManager(Node):
                             name="bag_uri",
                             value=ParameterValue(
                                 type=ParameterType.PARAMETER_STRING,
-                                # TODO: Remove this if not needed anymore
-                                # string_value=self.recorded_bag_uris[self.nr_recordings_played_back],
                                 string_value=self.base_bag_path + self.curr_participant_task_to_bag_name(),
                             ),
                         )
