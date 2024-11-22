@@ -31,7 +31,7 @@ def start_session_logger(
                 "action_log",
                 # Output file
                 "--output",
-                f"/home/fr3/nakama_ws/bags/hmi/participant_{participant_nr:03}/session_{datetime.now().strftime('%Y-%m-%d_%H:%M:%S')}",
+                f"/home/fr3/nakama_ws/bags/hmi/participant_{participant_nr:03}/session_{datetime.now().strftime('%Y-%m-%d_%H_%M_%S')}",
             ],
             output="screen",
             condition=IfCondition(record_session_launch_configuration)
