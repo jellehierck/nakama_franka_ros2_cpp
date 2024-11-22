@@ -10,9 +10,10 @@ HMI experiment in November/December 2024 which is operated by Jelle Hierck.
    1. Log in as NakamaFrankaAdmin (pwd: regular password + first half of serial number of robot).
    2. Go to `SETTINGS > End Effector` and select `HMI-Basket` from dropdown list.
    3. Go to `DESK` and enable FCI.
-2. Ensure camera tripods, trays and baskets are in correct place.
-3. Start up HMI laptop with forms.
-4. Check enough consent forms.
+2. Ensure camera tripods, interaction button, trays and baskets are in correct place.
+3. Check if camera and buttons have power.
+4. Start up HMI laptop with forms.
+5. Check enough consent forms.
 
 ### Session 1 (training phase)
 
@@ -101,65 +102,61 @@ HMI experiment in November/December 2024 which is operated by Jelle Hierck.
 
 ### Session 2 (tasking phase)
 
-1. Welcome for participant
+1. Set up equipment:
 
-   1. Explain procedure... TODO
+   1. Check that all fruits and vegetables are in the correct place.
+   2. Open robot joints.
+   3. Put robot in Automatic Mode (enable button DOWN).
 
-2. Set up equipment
+2. Welcome for participant
 
-   1. Start both cameras, clap twice for audio and video synchronization.
-   2. In FCI desk:
-      1. log in as NakamaFrankaAdmin (pwd: regular password + first half of serial number of robot).
-      2. Go to `SETTINGS > End Effector` and select `HMI-Basket` from dropdown list.
-      3. Go to `DESK` and enable FCI.
+   1. Session info.
+      1. The tasks which are taught by current participant and another participant are played back.
+      2. We will first look at the task and then perform the task with the robot.
+   2. Safety information.
+      1. Participant can stop experiment at any time.
+      2. Operator controls safety button.
+      3. Operator will notify when robot will move automatically.
+      4. Everything is under operator supervision.
+   3. A recording is made of this session
 
-   3. Start launch file:
+3. Start experiment.
+
+   1. Start video recording on both cameras, clap twice for audio and video synchronization.
+   2. Start launch file:
 
       ```bash
-      cd ~/nakama_ws
-      source install/setup.bash
       ros2 launch nakama_franka_bringup interaction_button_manager.launch.py participant_nr:=  # Insert number here
       ```
 
-   4. Put robot in Automatic Mode (enable button DOWN)
-   5. Home the robot (in 2nd terminal)
-
-      ```bash
-      cd ~/nakama_ws
-      source install/setup.bash
-      ros2 topic pub /button_press bee_buttons_interfaces/msg/BeeButtonPress "{ press_type: 'DOUBLE_PRESSED'  }" --once
-      ```
-
-3. Show the playback procedure
-   1. Move to OPERATING mode
+   3. Put robot in Automatic Mode (enable button DOWN)
+   4. Put robot in OPERATING / Task state (in 2nd terminal): `ros2 topic pub /button_press bee_buttons_interfaces/msg/BeeButtonPress "{ press_type: 'LONG_PRESS'  }" --once
 
       ```bash
       ros2 topic pub /button_press bee_buttons_interfaces/msg/BeeButtonPress "{ press_type: 'LONG_PRESS'  }" --once
       ```
 
-   2. Put robot in Automatic Mode (enable button DOWN)
-   3. Home the robot
+4. Show the playback procedure.
+   1. Home the robot: `ros2 topic pub /button_press bee_buttons_interfaces/msg/BeeButtonPress "{ press_type: 'DOUBLE_PRESSED'  }" --once`
+   2. The participant can now play back motions sequences by pressing the interaction button once.
+   3. **DO NOT ACTUALLY DO TASK!** Only let the participant watch.
 
-      ```bash
-      ros2 topic pub /button_press bee_buttons_interfaces/msg/BeeButtonPress "{ press_type: 'DOUBLE_PRESSED'  }" --once
-      ```
+5. Let participant execute task.
+6. Let participant fill out form after task.
 
-   4. The participant can now play back motions sequences by pressing the interaction button once.
-   5. DO NOT ACTUALLY DO TASK
+7. Repeat steps 3-6 for other participant's task.
 
-4. Shut down equipment
-   1. Stop both cameras
-   2. Stop the terminal with the launch file
-   3. Lock the robot joints
+8. Shut down equipment.
+   1. Stop both cameras.
+   2. Stop the terminal with the launch file.
+   3. Lock the robot joints.
 
-5. Finalize experiment for participant
-   1. Let them fill out form for session 1
-   2. Plan a session 2
-   3. Ask for feedback points
+9. Finalize experiment for participant.
+   1. Give participant bol.com voucher.
 
-6. Final steps
-   1. Remove recordings from camera and store on disk
-   2. Store recorded task bags and session logging bags to disk
+10. Final steps.
+    1. Remove recordings from camera and store on disk.
+    2. Store recorded task bags and session logging bags to disk.
 
 ## HMI experiment starting point
 
