@@ -2,6 +2,10 @@
 
 HMI experiment in November/December 2024 which is operated by Jelle Hierck.
 
+The code used for this experiment is found in <https://bitbucket.org/ctw-bw/nakama_franka_ros2_cpp/commits/8c3414dac75cd5dffaea7dd3904e9b1e801e041a>
+
+The code used for the `franka_ros2` library is found in <https://github.com/frankaemika/franka_ros2/commit/86ff6f49b1a1f5eb3c7ac5ae04e582df57a0022e>
+
 ## Experiment procedure
 
 ### Start of day preparation
