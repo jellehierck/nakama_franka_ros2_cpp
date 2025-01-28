@@ -17,7 +17,7 @@
 .vscode/
 
 # Opinionated formatting or linting tools
-ruff.toml
+.ruff.toml
 .clang-format
 .clang-tidy
 .clangd
