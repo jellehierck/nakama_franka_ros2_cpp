@@ -9,15 +9,24 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>example_interfaces</depend>
+  <!-- ROS built-in dependencies -->
   <depend>rclcpp</depend>
+  <depend>example_interfaces</depend>
   <depend>rosbag2_cpp</depend>
+  <depend>rosbag2_transport</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
-  <depend>franka_msgs</depend>
   <depend>std_srvs</depend>
+
+  <!-- Third-party ROS dependencies -->
+  <depend>nakama_msgs</depend>
+
+  <!-- First-party ROS dependencies -->
   <depend>nakama_franka_interfaces</depend>
 
+  <!-- Other dependencies -->
+
+  <!-- Test dependencies -->
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

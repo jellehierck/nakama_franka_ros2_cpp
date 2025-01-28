@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StopBagRecording.srv"
 
   # Actions
+  "action/FrankaMoveToPose.action"
 )
 
 if(BUILD_TESTING)

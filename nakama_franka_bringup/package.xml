@@ -9,11 +9,13 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- ROS built-in dependencies -->
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>rosbag2</exec_depend>
 
+  <!-- Third-party ROS dependencies -->
   <exec_depend>rviz2</exec_depend>
   <exec_depend>xacro</exec_depend>
-  <exec_depend>plotjuggler</exec_depend>
 
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
@@ -23,10 +25,18 @@
   <exec_depend>franka_description</exec_depend>
   <exec_depend>franka_hardware</exec_depend>
   <exec_depend>franka_robot_state_broadcaster</exec_depend>
+  <exec_depend>franka_example_controllers</exec_depend>
 
+  <!-- First-party ROS dependencies -->
+  <exec_depend>bee_buttons</exec_depend>
   <exec_depend>nakama_franka_bag</exec_depend>
   <exec_depend>nakama_franka_controllers</exec_depend>
+  <exec_depend>nakama_franka_interaction_buttons</exec_depend>
 
+  <!-- Other dependencies -->
+  <exec_depend>plotjuggler</exec_depend>
+
+  <!-- Test dependencies -->
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
 

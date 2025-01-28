@@ -69,12 +69,13 @@ def generate_launch_description():
                     use_rviz_parameter_name: use_rviz,
                 }.items(),
             ),
-            # Spawn the controller
+            # Load the playback controller
             Node(
                 package="controller_manager",
                 executable="spawner",
                 arguments=[
                     "nakama_bag_playback_joint_impedance_controller",
+                    "--inactive",  # Important: load and configure the controller but do not activate
                     "--param-file",
                     PathJoinSubstitution(
                         [

@@ -37,6 +37,3 @@ nakama_bag_playback_joint_impedance_controller:
     #   - 3.0
     #   - 3.0
     #   - 1.5
-
-    bag_uri: "/home/fr3/nakama_ws/bags/recorded_bag_eight_motion"
-    bag_topic: /joint_state_commands
