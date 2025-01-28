@@ -1,0 +1,27 @@
+<library path="nakama_franka_controllers">
+    <class name="nakama_franka_controllers/LocalJointPositionController" type="nakama_franka_controllers::LocalJointPositionController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Performs a predefind motion path for the first joint using only local position control.
+        </description>
+    </class>
+    <class name="nakama_franka_controllers/LocalJointImpedanceController" type="nakama_franka_controllers::LocalJointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Performs a predefind motion path for the first joint using only local joint impedance control.
+        </description>
+    </class>
+    <class name="nakama_franka_controllers/TopicJointImpedanceController" type="nakama_franka_controllers::TopicJointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Controls the robot to follow a path sent via a command topic using impedance control.
+        </description>
+    </class>
+    <class name="nakama_franka_controllers/BagPlaybackJointImpedanceController" type="nakama_franka_controllers::BagPlaybackJointImpedanceController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Controls the robot to follow a path stored inside a rosbag, using joint impedance control.
+        </description>
+    </class>
+    <class name="nakama_franka_controllers/BagRecorderController" type="nakama_franka_controllers::BagRecorderController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            Reads the robot state and stores relevant interfaces to a rosbag.
+        </description>
+    </class>
+</library>

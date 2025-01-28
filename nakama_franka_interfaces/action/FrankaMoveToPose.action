@@ -1,0 +1,17 @@
+# Request
+
+# Desired goal position
+float64[7] goal_joint_positions
+
+# General speed factor of the generated motion in range (0, 1].
+float64 SPEED_FACTOR_MIN = 0.0
+float64 SPEED_FACTOR_MAX = 1.0
+float64 speed_factor 0.2
+
+---
+# Result
+float64[7] final_joint_positions
+
+---
+# Feedback
+float64[7] curr_joint_positions

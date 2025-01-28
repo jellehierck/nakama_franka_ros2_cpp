@@ -1,0 +1,6 @@
+nakama_local_joint_position_controller:
+  ros__parameters:
+    # Controller type
+    type: nakama_franka_controllers/LocalJointPositionController
+
+    # Controller-specific parameters

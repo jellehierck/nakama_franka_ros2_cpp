@@ -1,0 +1,23 @@
+# The location and filename of the bag file to use.
+# The bag_name and bag_path are concatenated directly (`path = bag_path + bag_name`), so make sure that `bag_path` ends 
+# with a path separator (`"/"` for Linux).
+# A full path is recommended, but a relative path is stored relative to the directory where this node was started.
+# Note that the tilde `~/` is not supported, use `/home/<username>/` instead.
+string bag_path "bags/"
+
+# This name should be a valid name for a bag folder, i.e. not end in a path separator (`"/"` for Linux)
+string bag_name "recorded_bag"
+
+# Whether the bag name is appended with a timestamp of the time it was opened.
+# The format used is an underscore followed by the ISO 8601 datetime format (without timezone specifier), e.g. 
+# "_2024-10-23T17:16:40"
+bool append_timestamp true
+
+---
+
+# Result is whether the bag is opened or not.
+bool started
+
+# Revoled URI to opened bag.
+# This can be used to access the same bag elsewhere, even if e.g. a timestamp was appended.
+string opened_bag_uri
