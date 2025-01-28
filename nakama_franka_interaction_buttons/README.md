@@ -6,6 +6,16 @@ The code used for this experiment is found in <https://bitbucket.org/ctw-bw/naka
 
 The code used for the `franka_ros2` library is found in <https://github.com/frankaemika/franka_ros2/commit/86ff6f49b1a1f5eb3c7ac5ae04e582df57a0022e>
 
+- A change was made in the source code to change the default pose of the MoveToStart controller which rotates the last link by 180 degrees (Line 74 of `franka_example_controllers/src/move_to_start_example_controller.cpp`, [source file](https://github.com/frankaemika/franka_ros2/blob/86ff6f49b1a1f5eb3c7ac5ae04e582df57a0022e/franka_example_controllers/src/move_to_start_example_controller.cpp#L74)):
+  
+  ```cpp
+    // Original line:
+    q_goal_ << 0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4;
+
+    // New line:
+    q_goal_ << 0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4 - M_PI;
+  ```
+
 ## Experiment procedure
 
 ### Start of day preparation
